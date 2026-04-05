@@ -16,7 +16,7 @@ from aiogram.dispatcher.filters.state import State, StatesGroup
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
 
 # ── CONFIG ──────────────────────────────────────
-BOT_TOKEN       = "8482556686:AAGnjpsh-LrQ0FqxnvAv120MzU-U1CVeFKw"
+BOT_TOKEN       = "8764242330:AAED4AV4sIewgwC_2kNyf9sPKjSynUNSYK0"
 ADMIN_ID        = 6170044774
 SELLER_ID       = 6096342723
 SELLER_USERNAME = "@anvarvva_m"
