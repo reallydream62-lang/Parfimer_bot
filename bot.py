@@ -16,12 +16,16 @@ from aiogram.dispatcher.filters.state import State, StatesGroup
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
 
 # ── CONFIG ──────────────────────────────────────
-BOT_TOKEN       = "8764242330:AAED4AV4sIewgwC_2kNyf9sPKjSynUNSYK0"
-ADMIN_ID        = 6170044774
-SELLER_ID       = 6096342723
-SELLER_USERNAME = "@anvarvva_m"
-DB_FILE         = "shop.db"
+# TOKEN Railway Variables dan o'qiladi (xavfsiz)
+BOT_TOKEN       = os.environ.get("BOT_TOKEN", "")
+ADMIN_ID        = int(os.environ.get("ADMIN_ID", "6170044774"))
+SELLER_ID       = int(os.environ.get("SELLER_ID", "6096342723"))
+SELLER_USERNAME = os.environ.get("SELLER_USERNAME", "@anvarvva_m")
+DB_FILE         = os.environ.get("DB_FILE", "shop.db")
 # ────────────────────────────────────────────────
+
+if not BOT_TOKEN:
+    raise ValueError("BOT_TOKEN environment variable not set!")
 
 logging.basicConfig(level=logging.INFO)
 bot     = Bot(token=BOT_TOKEN)
@@ -126,8 +130,11 @@ def add_category(name):
         with db() as c:
             c.execute("INSERT INTO categories (name) VALUES (?)", (name,))
             return c.lastrowid
+    except sqlite3.IntegrityError:
+        # UNIQUE constraint - allaqachon mavjud
+        return -1
     except Exception as e:
-        logging.error(e); return None
+        logging.error(f"add_category xato: {e}"); return None
 
 def add_subcategory(cat_id, name):
     try:
@@ -1243,19 +1250,20 @@ async def admin_add(msg: types.Message, state: FSMContext):
     if not is_admin(msg.from_user.id):
         await msg.answer("❌ Ruxsat yo'q.")
         return
+    await AddProduct.cat.set()
     cats = get_categories()
     if not cats:
         await msg.answer(
-            "⚠️ Hozircha kategoriya yo'q.\n"
-            "Avval /addcat bilan kategoriya qo'shing."
+            "📂 1/6 — Hozircha kategoriya yo'q.\n"
+            "➕ tugmasi bilan yangi kategoriya qo'shing:",
+            reply_markup=cats_kb(with_new=True)
         )
-        return
-    await AddProduct.cat.set()
-    await msg.answer(
-        "📂 1/6 — Kategoriyani tanlang:\n"
-        "(Yangi kategoriya kerak bo'lsa ➕ tugmasini bosing)",
-        reply_markup=cats_kb(with_new=True)
-    )
+    else:
+        await msg.answer(
+            "📂 1/6 — Kategoriyani tanlang:\n"
+            "(Yangi kategoriya kerak bo'lsa ➕ tugmasini bosing)",
+            reply_markup=cats_kb(with_new=True)
+        )
 
 # Kategoriya tanlandi
 @dp.message_handler(state=AddProduct.cat)
@@ -1786,8 +1794,11 @@ async def addcat_name(msg: types.Message, state: FSMContext):
         return
     name = msg.text.strip()
     cat_id = add_category(name)
+    if cat_id == -1:
+        await msg.answer("⚠️ Bu nom bilan kategoriya allaqachon mavjud. Boshqa nom kiriting.")
+        return
     if not cat_id:
-        await msg.answer("⚠️ Bu kategoriya allaqachon mavjud.")
+        await msg.answer("❌ Xato yuz berdi. Qaytadan urinib ko'ring.")
         return
     await state.update_data(new_cat_id=cat_id, new_cat_name=name)
     await AddCat.subs.set()
