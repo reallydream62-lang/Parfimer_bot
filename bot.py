@@ -127,20 +127,27 @@ def get_subcategories(cat_id):
 
 def add_category(name):
     try:
-        with db() as c:
-            c.execute("INSERT INTO categories (name) VALUES (?)", (name,))
-            return c.lastrowid
+        conn = db()
+        cur = conn.cursor()
+        cur.execute("INSERT INTO categories (name) VALUES (?)", (name,))
+        conn.commit()
+        lid = cur.lastrowid
+        conn.close()
+        return lid
     except sqlite3.IntegrityError:
-        # UNIQUE constraint - allaqachon mavjud
         return -1
     except Exception as e:
         logging.error(f"add_category xato: {e}"); return None
 
 def add_subcategory(cat_id, name):
     try:
-        with db() as c:
-            c.execute("INSERT INTO subcategories (cat_id, name) VALUES (?,?)", (cat_id, name))
-            return c.lastrowid
+        conn = db()
+        cur = conn.cursor()
+        cur.execute("INSERT INTO subcategories (cat_id, name) VALUES (?,?)", (cat_id, name))
+        conn.commit()
+        lid = cur.lastrowid
+        conn.close()
+        return lid
     except Exception as e:
         logging.error(e); return None
 
@@ -220,12 +227,16 @@ def search_products(query):
 
 def add_product(name, desc, price, cat_id, sub_id, photo_id):
     try:
-        with db() as c:
-            c.execute(
-                "INSERT INTO products (name,description,price,cat_id,sub_id,photo_id) "
-                "VALUES (?,?,?,?,?,?)",
-                (name, desc, price, cat_id, sub_id, photo_id))
-            return c.lastrowid
+        conn = db()
+        cur = conn.cursor()
+        cur.execute(
+            "INSERT INTO products (name,description,price,cat_id,sub_id,photo_id) "
+            "VALUES (?,?,?,?,?,?)",
+            (name, desc, price, cat_id, sub_id, photo_id))
+        conn.commit()
+        lid = cur.lastrowid
+        conn.close()
+        return lid
     except Exception as e:
         logging.error(e); return None
 
@@ -293,16 +304,19 @@ def get_all_users():
 def create_order(user_id, phone, cart):
     try:
         total = sum(p["price"] for p in cart)
-        with db() as c:
-            c.execute(
-                "INSERT INTO orders (user_id, phone, total) VALUES (?,?,?)",
-                (user_id, phone, total))
-            oid = c.lastrowid
-            for item in cart:
-                c.execute(
-                    "INSERT INTO order_items (order_id, product_id, name, price) VALUES (?,?,?,?)",
-                    (oid, item.get("id"), item["name"], item["price"]))
-            return oid
+        conn = db()
+        cur = conn.cursor()
+        cur.execute(
+            "INSERT INTO orders (user_id, phone, total) VALUES (?,?,?)",
+            (user_id, phone, total))
+        oid = cur.lastrowid
+        for item in cart:
+            cur.execute(
+                "INSERT INTO order_items (order_id, product_id, name, price) VALUES (?,?,?,?)",
+                (oid, item.get("id"), item["name"], item["price"]))
+        conn.commit()
+        conn.close()
+        return oid
     except Exception as e:
         logging.error(e); return None
 
@@ -802,14 +816,14 @@ async def _show_products(msg, state, prods, mode, title):
             await send_product_card(msg.chat.id, p)
             await asyncio.sleep(0.05)
     else:
+        await state.finish()
         await msg.answer(
             f"<b>{title}</b> mahsulotlari:",
-            reply_markup=back_kb(), parse_mode="HTML"
+            reply_markup=main_kb(), parse_mode="HTML"
         )
         for p in prods:
             await send_product_card(msg.chat.id, p)
             await asyncio.sleep(0.05)
-        await state.finish()
 
 # Mahsulot tanlandi (order rejimi)
 @dp.message_handler(state=Browse.prod)
@@ -859,8 +873,9 @@ async def search_do(msg: types.Message, state: FSMContext):
         await state.finish()
         await msg.answer("Asosiy menyu:", reply_markup=main_kb())
         return
-    found = search_products(msg.text.strip())
+    query = msg.text.strip()
     await state.finish()
+    found = search_products(query)
     if not found:
         await msg.answer("❌ Hech narsa topilmadi.", reply_markup=main_kb())
         return
@@ -935,7 +950,7 @@ async def cart_remove_do(msg: types.Message, state: FSMContext):
         else:
             await msg.answer("❓ Ro'yxatdan tanlang.")
     except Exception:
-        await msg.answer("❓ Ro'yxatdan tanlang.")
+        await msg.answer("❓ Ro'yxatdan tanlang.", reply_markup=back_kb())
 
 
 # ════════════════════════════════════════════════
@@ -1223,8 +1238,9 @@ async def _send_req(msg, state, name, photo_id):
 #  SOTUVCHI — buyurtmalar
 # ════════════════════════════════════════════════
 
-@dp.message_handler(lambda m: m.text == "📋 Buyurtmalar")
-async def seller_orders(msg: types.Message):
+@dp.message_handler(lambda m: m.text == "📋 Buyurtmalar", state="*")
+async def seller_orders(msg: types.Message, state: FSMContext):
+    await state.finish()
     if not is_seller(msg.from_user.id) and not is_admin(msg.from_user.id):
         return
     orders = get_all_orders(20)
@@ -1315,8 +1331,11 @@ async def addprod_new_cat(msg: types.Message, state: FSMContext):
         return
     name = msg.text.strip()
     cat_id = add_category(name)
+    if cat_id == -1:
+        await msg.answer("⚠️ Bu nom bilan kategoriya allaqachon mavjud. Boshqa nom kiriting.")
+        return
     if not cat_id:
-        await msg.answer("⚠️ Bu kategoriya allaqachon mavjud yoki xato.")
+        await msg.answer("❌ Xato yuz berdi. Qaytadan urinib ko'ring.")
         return
     await state.update_data(pcat_id=cat_id, pcat_name=name)
     await AddProduct.sub.set()
