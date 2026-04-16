@@ -17,8 +17,8 @@ from aiogram.contrib.fsm_storage.memory import MemoryStorage
 # ── CONFIG ──────────────────────────────────────
 BOT_TOKEN       = os.environ.get("BOT_TOKEN", "")
 ADMIN_ID        = int(os.environ.get("ADMIN_ID", "6170044774"))
-SELLER_ID       = int(os.environ.get("SELLER_ID", "6096342723"))
-SELLER_USERNAME = os.environ.get("SELLER_USERNAME", "@anvarvva_m")
+SELLER_ID       = int(os.environ.get("SELLER_ID", "6170044774"))
+SELLER_USERNAME = os.environ.get("SELLER_USERNAME", "@@Musokhan_0")
 DB_FILE         = os.environ.get("DB_FILE", "shop.db")
 
 if not BOT_TOKEN:
