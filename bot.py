@@ -18,8 +18,9 @@ from aiogram.contrib.fsm_storage.memory import MemoryStorage
 BOT_TOKEN       = os.environ.get("BOT_TOKEN", "")
 ADMIN_ID        = int(os.environ.get("ADMIN_ID", "6170044774"))
 SELLER_ID       = int(os.environ.get("SELLER_ID", "6170044774"))
-SELLER_USERNAME = os.environ.get("SELLER_USERNAME", "@@Musokhan_0")
+SELLER_USERNAME = os.environ.get("SELLER_USERNAME", "@Musokhan_0")
 DB_FILE         = os.environ.get("DB_FILE", "shop.db")
+# Railway da ma'lumotlar yo'qolmasligi uchun Volume ulang va DB_FILE=/data/shop.db qiling
 
 if not BOT_TOKEN:
     raise ValueError("BOT_TOKEN environment variable not set!")
@@ -396,9 +397,24 @@ def db_get_all_users():
 
 def db_get_inactive_carts():
     """24 soat ichida buyurtma bermagan, savati to'liq foydalanuvchilar."""
+    try:
+        conn = get_conn()
+        # Oxirgi 24 soat ichida buyurtma bergan userlar
+        recent = set()
+        rows = conn.execute(
+            "SELECT DISTINCT user_id FROM orders "
+            "WHERE created_at >= datetime('now', '-24 hours')"
+        ).fetchall()
+        for r in rows:
+            recent.add(r["user_id"])
+        conn.close()
+    except Exception as e:
+        logging.error(e)
+        recent = set()
+
     result = []
     for uid, cart in CARTS.items():
-        if cart:
+        if cart and uid not in recent:
             result.append(uid)
     return result
 
@@ -578,17 +594,11 @@ async def send_product_card(chat_id, p, reply_markup=None):
 
     try:
         if photos and len(photos) > 1:
-            # Galereya
-            media = []
-            for i, ph in enumerate(photos[:5]):
-                if i == 0:
-                    media.append(types.InputMediaPhoto(ph["photo_id"], caption=text, parse_mode="HTML"))
-                else:
-                    media.append(types.InputMediaPhoto(ph["photo_id"]))
-            await bot.send_media_group(chat_id, media)
-            if reply_markup:
-                await bot.send_message(chat_id, "👆 Yuqoridagi mahsulot",
-                                       reply_markup=reply_markup)
+            # Galereya: birinchi rasmni inline tugma bilan yuborish
+            # (send_media_group inline markup qabul qilmaydi, shuning uchun
+            #  asosiy rasmni alohida yuboramiz, tugma to'g'ri xabarga birikadi)
+            await bot.send_photo(chat_id, photos[0]["photo_id"], caption=text,
+                                 parse_mode="HTML", reply_markup=reply_markup)
         elif main_photo:
             await bot.send_photo(chat_id, main_photo, caption=text,
                                  parse_mode="HTML", reply_markup=reply_markup)
@@ -1094,7 +1104,7 @@ def set_qty(uid, prod_id, variant_id, qty):
         QTY_BUFFER[uid] = {}
     QTY_BUFFER[uid][key] = max(1, qty)
 
-@dp.callback_query_handler(lambda c: c.data.startswith("addcart_"))
+@dp.callback_query_handler(lambda c: c.data.startswith("addcart_"), state="*")
 async def cb_addcart(cb: types.CallbackQuery):
     """Info rejimida inline 'Savatga solish' bosildi."""
     pid  = int(cb.data.split("_")[1])
@@ -1111,7 +1121,7 @@ async def cb_addcart(cb: types.CallbackQuery):
         )
         await cb.answer()
 
-@dp.callback_query_handler(lambda c: c.data.startswith("choosevar_"))
+@dp.callback_query_handler(lambda c: c.data.startswith("choosevar_"), state="*")
 async def cb_choosevar(cb: types.CallbackQuery):
     """Turni tanlash."""
     pid      = int(cb.data.split("_")[1])
@@ -1121,7 +1131,7 @@ async def cb_choosevar(cb: types.CallbackQuery):
     await cb.message.edit_reply_markup(reply_markup=variants_inline_kb(pid))
     await cb.answer()
 
-@dp.callback_query_handler(lambda c: c.data.startswith("variant_"))
+@dp.callback_query_handler(lambda c: c.data.startswith("variant_"), state="*")
 async def cb_variant_selected(cb: types.CallbackQuery):
     """Variant tanlandi."""
     parts = cb.data.split("_")
@@ -1134,39 +1144,27 @@ async def cb_variant_selected(cb: types.CallbackQuery):
     variant  = next((v for v in variants if v["id"] == vid), None)
     if not variant: await cb.answer(); return
 
-    # Variantni tanlangach uning rasmini ko'rsat va miqdor tugmalarini chiqar
+    # Variantni tanlangach — shu xabarda tugmalarni yangilash (yangi xabar EMAS)
     price = prod["price"] + variant.get("extra_price", 0)
     set_qty(cb.from_user.id, pid, vid, 1)
-
-    text = (
-        f"🎨 <b>{variant['name']}</b>\n"
-        f"💰 {price:,} so'm\n"
-        f"Miqdor: <b>{get_qty(cb.from_user.id, pid, vid)}</b>"
-    )
 
     kb = types.InlineKeyboardMarkup(row_width=3)
     prefix = f"qty_{pid}_{vid}"
     kb.add(
         types.InlineKeyboardButton("➖", callback_data=f"{prefix}_minus"),
-        types.InlineKeyboardButton(f"🛒 {get_qty(cb.from_user.id, pid, vid)} ta", callback_data=f"{prefix}_add"),
+        types.InlineKeyboardButton(f"🛒 1 ta", callback_data=f"{prefix}_add"),
         types.InlineKeyboardButton("➕", callback_data=f"{prefix}_plus"),
     )
     kb.add(types.InlineKeyboardButton("🔙 Turlar", callback_data=f"choosevar_{pid}"))
 
-    if variant.get("photo_id"):
-        try:
-            await cb.message.answer_photo(
-                variant["photo_id"], caption=text,
-                parse_mode="HTML", reply_markup=kb
-            )
-        except Exception:
-            await cb.message.answer(text, parse_mode="HTML", reply_markup=kb)
-    else:
-        await cb.message.answer(text, parse_mode="HTML", reply_markup=kb)
+    try:
+        await cb.message.edit_reply_markup(reply_markup=kb)
+    except Exception:
+        pass
 
-    await cb.answer(f"✅ {variant['name']} tanlandi")
+    await cb.answer(f"✅ {variant['name']} — {price:,} so'm", show_alert=False)
 
-@dp.callback_query_handler(lambda c: c.data.startswith("qty_"))
+@dp.callback_query_handler(lambda c: c.data.startswith("qty_"), state="*")
 async def cb_qty(cb: types.CallbackQuery):
     """Miqdor o'zgartirish va savatga solish."""
     parts     = cb.data.split("_")
@@ -1230,16 +1228,30 @@ async def cb_qty(cb: types.CallbackQuery):
         var_name = variant["name"] if variant else ""
 
         cart_add(uid, pid, prod["name"], price, qty, vid, var_name)
-        total_in_cart = len(cart_get(uid))
         await cb.answer(
             f"✅ {prod['name']}{' ('+var_name+')' if var_name else ''} "
             f"× {qty} ta savatga qo'shildi! 🛒",
             show_alert=True
         )
-        # QTY ni reset
+        # QTY ni reset qilib tugmani ham yangilash
         set_qty(uid, pid, vid, 1)
+        kb = types.InlineKeyboardMarkup(row_width=3)
+        prefix = f"qty_{pid}_{vid_raw}"
+        kb.add(
+            types.InlineKeyboardButton("➖", callback_data=f"{prefix}_minus"),
+            types.InlineKeyboardButton(f"🛒 1 ta", callback_data=f"{prefix}_add"),
+            types.InlineKeyboardButton("➕", callback_data=f"{prefix}_plus"),
+        )
+        if vid:
+            kb.add(types.InlineKeyboardButton("🔙 Turlar", callback_data=f"choosevar_{pid}"))
+        else:
+            kb.add(types.InlineKeyboardButton("🔙 Orqaga", callback_data=f"back_prod_{pid}"))
+        try:
+            await cb.message.edit_reply_markup(reply_markup=kb)
+        except Exception:
+            pass
 
-@dp.callback_query_handler(lambda c: c.data.startswith("back_prod_"))
+@dp.callback_query_handler(lambda c: c.data.startswith("back_prod_"), state="*")
 async def cb_back_prod(cb: types.CallbackQuery):
     """Inline orqaga — product inline kb ga qaytish."""
     pid  = int(cb.data.split("_")[2])
@@ -1416,7 +1428,7 @@ async def _finish_order(msg, state, phone):
 
 @dp.callback_query_handler(lambda c: c.data.split("_")[0] in (
     "acc","rej","ship","got","notgot","delivered","problem"
-))
+), state="*")
 async def order_callback(cb: types.CallbackQuery):
     parts  = cb.data.split("_")
     action = parts[0]
@@ -1905,15 +1917,19 @@ async def admin_edit(msg: types.Message, state: FSMContext):
 async def edit_search(msg: types.Message, state: FSMContext):
     found = db_search_products(msg.text.strip())
     if not found:
-        await msg.answer("❌ Topilmadi.")
+        await msg.answer("❌ Topilmadi. Qayta kiriting:")
         return
     if len(found) > 1:
-        kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
-        for p in found[:8]:
-            kb.add(p["name"])
-        kb.add("🔙 Orqaga")
-        await msg.answer("Bir nechta topildi:", reply_markup=kb)
-        return
+        exact = next((p for p in found if p["name"].lower() == msg.text.strip().lower()), None)
+        if exact:
+            found = [exact]
+        else:
+            kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
+            for p in found[:8]:
+                kb.add(p["name"])
+            kb.add("🔙 Orqaga")
+            await msg.answer("Bir nechta topildi, aniqrog'ini tanlang:", reply_markup=kb)
+            return
     prod = found[0]
     await state.update_data(edit_id=prod["id"])
     await EditProduct.field.set()
@@ -2027,8 +2043,15 @@ async def edit_var_menu(msg: types.Message, state: FSMContext):
         var      = next((v for v in vars_ if v["name"] == var_name), None)
         if var:
             db_delete_variant(var["id"])
-            await msg.answer(f"✅ '{var_name}' o'chirildi.")
+            await state.finish()
+            await msg.answer(f"✅ '{var_name}' o'chirildi.", reply_markup=staff_kb())
+        else:
+            await msg.answer("Tur topilmadi.", reply_markup=staff_kb())
+            await state.finish()
         return
+    # Noma'lum input — menyuga qaytish
+    await state.finish()
+    await msg.answer("Bekor qilindi.", reply_markup=staff_kb())
 
 @dp.message_handler(state=EditProduct.var_name)
 async def edit_var_name(msg: types.Message, state: FSMContext):
@@ -2082,15 +2105,25 @@ async def admin_delete(msg: types.Message, state: FSMContext):
 async def del_search(msg: types.Message, state: FSMContext):
     found = db_search_products(msg.text.strip())
     if not found:
-        await msg.answer("❌ Topilmadi.")
-        return
+        # To'liq nom bilan qidirish — balki klaviaturadan aniq nom tanlagan
+        found_exact = [p for p in db_get_products() if p["name"].lower() == msg.text.strip().lower()]
+        if found_exact:
+            found = found_exact
+        else:
+            await msg.answer("❌ Topilmadi. Qayta kiriting:")
+            return
     if len(found) > 1:
-        kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
-        for p in found[:8]:
-            kb.add(p["name"])
-        kb.add("🔙 Orqaga")
-        await msg.answer("Bir nechta topildi:", reply_markup=kb)
-        return
+        # Aniq nom borligini tekshir (klaviaturadan tanlangan bo'lishi mumkin)
+        exact = next((p for p in found if p["name"].lower() == msg.text.strip().lower()), None)
+        if exact:
+            found = [exact]
+        else:
+            kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
+            for p in found[:8]:
+                kb.add(p["name"])
+            kb.add("🔙 Orqaga")
+            await msg.answer("Bir nechta topildi, aniqrog'ini tanlang:", reply_markup=kb)
+            return
     prod = found[0]
     await state.update_data(del_id=prod["id"], del_name=prod["name"])
     await DeleteProduct.confirm.set()
