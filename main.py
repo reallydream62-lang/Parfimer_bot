@@ -12,7 +12,7 @@ from aiogram.contrib.fsm_storage.redis import RedisStorage2
 from config import BOT_TOKEN, REDIS_URL, ADMIN_ID, SELLER_ID
 from db.connection import create_pool, close_pool
 from db.init_db import init_db
-from db.orders import db_get_inactive_cart_users, 
+from db.orders import db_get_inactive_cart_users
 from db.users import db_get_stats, db_get_daily_report
 from db.carts import cart_get, cart_total
 
