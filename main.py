@@ -8,12 +8,13 @@ from datetime import datetime, timedelta
 
 from aiogram import Bot, Dispatcher, executor
 from aiogram.contrib.fsm_storage.redis import RedisStorage2
+from aiogram.dispatcher.middlewares import BaseMiddleware
 
 from config import BOT_TOKEN, REDIS_URL, ADMIN_ID, SELLER_ID
 from db.connection import create_pool, close_pool
 from db.init_db import init_db
 from db.orders import db_get_inactive_cart_users
-from db.users import db_get_stats, db_get_daily_report
+from db.users import db_get_stats, db_get_daily_report, db_is_banned
 from db.carts import cart_get, cart_total
 
 from handlers.common  import register_common
@@ -26,9 +27,54 @@ from handlers.admin   import register_admin
 
 logger = logging.getLogger(__name__)
 
+
+# ── Ban middleware ────────────────────────────────
+class BanMiddleware(BaseMiddleware):
+    async def on_pre_process_message(self, msg: types.Message, data: dict):
+        if await db_is_banned(msg.from_user.id):
+            await msg.answer("⛔ Siz bloklangansiz.")
+            raise CancelledError()
+
+    async def on_pre_process_callback_query(self, cb: types.CallbackQuery, data: dict):
+        if await db_is_banned(cb.from_user.id):
+            await cb.answer("⛔ Siz bloklangansiz.", show_alert=True)
+            raise CancelledError()
+
+
+class CancelledError(Exception):
+    pass
+
 # ── Bot va Dispatcher ────────────────────────────
-bot     = Bot(token=BOT_TOKEN, parse_mode="HTML")
-storage = RedisStorage2.from_url(REDIS_URL)
+bot = Bot(token=BOT_TOKEN, parse_mode="HTML")
+
+
+def _make_storage(redis_url: str) -> RedisStorage2:
+    """
+    Upstash REDIS_URL ni parse qilib RedisStorage2 yaratadi.
+    Format: rediss://default:PASSWORD@HOST:PORT
+    """
+    import re
+    # SSL (rediss://)
+    m = re.match(r"rediss://(?:[^:]+):([^@]+)@([^:]+):(\d+)", redis_url)
+    if m:
+        return RedisStorage2(
+            host=m.group(2),
+            port=int(m.group(3)),
+            password=m.group(1),
+            ssl=True
+        )
+    # SSL siz (redis://)
+    m2 = re.match(r"redis://(?:[^:]*):?([^@]*)@?([^:]+):(\d+)", redis_url)
+    if m2:
+        return RedisStorage2(
+            host=m2.group(2),
+            port=int(m2.group(3)),
+            password=m2.group(1) or None
+        )
+    return RedisStorage2()
+
+
+storage = _make_storage(REDIS_URL)
 dp      = Dispatcher(bot, storage=storage)
 
 
@@ -104,6 +150,7 @@ async def daily_report():
 async def on_startup(dp):
     await create_pool()
     await init_db()
+    dp.middleware.setup(BanMiddleware())
     register_all(dp)
     asyncio.create_task(cart_reminder())
     asyncio.create_task(daily_report())
