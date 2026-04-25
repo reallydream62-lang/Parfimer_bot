@@ -6,7 +6,7 @@ import asyncio
 import logging
 from datetime import datetime, timedelta
 
-from aiogram import Bot, Dispatcher, executor
+from aiogram import Bot, Dispatcher, executor, types
 from aiogram.contrib.fsm_storage.redis import RedisStorage2
 from aiogram.dispatcher.middlewares import BaseMiddleware
 
@@ -52,16 +52,20 @@ def _make_storage(redis_url: str) -> RedisStorage2:
     """
     Upstash REDIS_URL ni parse qilib RedisStorage2 yaratadi.
     Format: rediss://default:PASSWORD@HOST:PORT
+    aioredis 1.3.1 bilan mos.
     """
     import re
+    import ssl as ssl_module
+
     # SSL (rediss://)
     m = re.match(r"rediss://(?:[^:]+):([^@]+)@([^:]+):(\d+)", redis_url)
     if m:
+        ssl_ctx = ssl_module.create_default_context()
         return RedisStorage2(
             host=m.group(2),
             port=int(m.group(3)),
             password=m.group(1),
-            ssl=True
+            ssl=ssl_ctx
         )
     # SSL siz (redis://)
     m2 = re.match(r"redis://(?:[^:]*):?([^@]*)@?([^:]+):(\d+)", redis_url)
