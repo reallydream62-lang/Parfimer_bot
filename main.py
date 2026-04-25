@@ -7,10 +7,10 @@ import logging
 from datetime import datetime, timedelta
 
 from aiogram import Bot, Dispatcher, executor, types
-from aiogram.contrib.fsm_storage.redis import RedisStorage2
+from aiogram.contrib.fsm_storage.memory import MemoryStorage
 from aiogram.dispatcher.middlewares import BaseMiddleware
 
-from config import BOT_TOKEN, REDIS_URL, ADMIN_ID, SELLER_ID
+from config import BOT_TOKEN, ADMIN_ID, SELLER_ID
 from db.connection import create_pool, close_pool
 from db.init_db import init_db
 from db.orders import db_get_inactive_cart_users
@@ -48,37 +48,9 @@ class CancelledError(Exception):
 bot = Bot(token=BOT_TOKEN, parse_mode="HTML")
 
 
-def _make_storage(redis_url: str) -> RedisStorage2:
-    """
-    Upstash REDIS_URL ni parse qilib RedisStorage2 yaratadi.
-    Format: rediss://default:PASSWORD@HOST:PORT
-    aioredis 1.3.1 bilan mos.
-    """
-    import re
-    import ssl as ssl_module
-
-    # SSL (rediss://)
-    m = re.match(r"rediss://(?:[^:]+):([^@]+)@([^:]+):(\d+)", redis_url)
-    if m:
-        ssl_ctx = ssl_module.create_default_context()
-        return RedisStorage2(
-            host=m.group(2),
-            port=int(m.group(3)),
-            password=m.group(1),
-            ssl=ssl_ctx
-        )
-    # SSL siz (redis://)
-    m2 = re.match(r"redis://(?:[^:]*):?([^@]*)@?([^:]+):(\d+)", redis_url)
-    if m2:
-        return RedisStorage2(
-            host=m2.group(2),
-            port=int(m2.group(3)),
-            password=m2.group(1) or None
-        )
-    return RedisStorage2()
-
-
-storage = _make_storage(REDIS_URL)
+# ── Bot va Dispatcher ────────────────────────────
+bot     = Bot(token=BOT_TOKEN, parse_mode="HTML")
+storage = MemoryStorage()
 dp      = Dispatcher(bot, storage=storage)
 
 
@@ -163,8 +135,6 @@ async def on_startup(dp):
 
 async def on_shutdown(dp):
     await close_pool()
-    await storage.close()
-    await storage.wait_closed()
     logger.info("Bot to'xtatildi.")
 
 
