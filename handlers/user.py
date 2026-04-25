@@ -1,5 +1,6 @@
 # ================================================
 # handlers/user.py — /start, sevimlilar, oxirgi ko'rilganlar
+# Ban tekshiruvi middleware orqali main.py da
 # ================================================
 
 import asyncio
@@ -7,22 +8,16 @@ import logging
 from aiogram import types
 from aiogram.dispatcher import FSMContext
 
-from utils.helpers import is_staff, is_admin, is_seller, send_product_card
-from utils.helpers import notify
+from utils.helpers import is_admin, is_seller, send_product_card
 from keyboards.reply import main_kb, staff_kb, seller_kb, back_kb
 from keyboards.inline import product_info_inline_kb
-from db.users import db_save_user, db_is_banned
+from db.users import db_save_user
 from db.products import db_get_favorites, db_get_last_seen, db_is_favorite
 
 logger = logging.getLogger(__name__)
 
 
 def register_user(dp):
-
-    # ── Ban tekshiruv ────────────────────────────
-    @dp.message_handler(lambda m: _check_ban(m), state="*")
-    async def banned_handler(msg: types.Message):
-        await msg.answer("⛔ Siz bloklangansiz.")
 
     # ── /start ───────────────────────────────────
     @dp.message_handler(commands=["start"], state="*")
@@ -101,13 +96,3 @@ def register_user(dp):
                 uid=uid
             )
             await asyncio.sleep(0.05)
-
-
-def _check_ban(msg: types.Message) -> bool:
-    """Sinxron ban tekshiruv (lambda uchun)."""
-    import asyncio
-    try:
-        loop = asyncio.get_event_loop()
-        return loop.run_until_complete(db_is_banned(msg.from_user.id))
-    except Exception:
-        return False
