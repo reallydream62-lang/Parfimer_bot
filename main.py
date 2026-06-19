@@ -4,7 +4,10 @@
 
 import asyncio
 import logging
+import os
+import threading
 from datetime import datetime, timedelta
+from http.server import BaseHTTPRequestHandler, HTTPServer
 
 from aiogram import Bot, Dispatcher, executor, types
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
@@ -26,6 +29,30 @@ from handlers.seller  import register_seller
 from handlers.admin   import register_admin
 
 logger = logging.getLogger(__name__)
+
+
+# ════════════════════════════════════════════════
+#  Render "Web Service" uchun — engil HTTP server
+# ════════════════════════════════════════════════
+# Render bepul tarifida faqat Web Service'larga (Background Worker'ga emas)
+# ruxsat beradi, va ular qaysidir portda tinglashini talab qiladi.
+# Bot o'zi Telegram bilan polling orqali ishlaydi — bu serverga
+# umuman aloqasi yo'q, faqat Render'ga "men tiriman" deb signal beradi.
+class _HealthHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header("Content-type", "text/plain")
+        self.end_headers()
+        self.wfile.write(b"Bot ishlamoqda")
+
+    def log_message(self, format, *args):
+        pass  # konsolni keraksiz log bilan to'ldirmaslik uchun
+
+
+def _run_health_server():
+    port = int(os.environ.get("PORT", 10000))
+    server = HTTPServer(("0.0.0.0", port), _HealthHandler)
+    server.serve_forever()
 
 
 # ── Ban middleware ────────────────────────────────
@@ -139,6 +166,7 @@ async def on_shutdown(dp):
 # ════════════════════════════════════════════════
 
 if __name__ == "__main__":
+    threading.Thread(target=_run_health_server, daemon=True).start()
     executor.start_polling(
         dp,
         skip_updates=True,
