@@ -64,8 +64,6 @@ def register_common(dp):
 
 def _get_kb(uid: int):
     from config import ADMIN_ID, SELLER_ID
-    if uid == ADMIN_ID:
+    if uid == ADMIN_ID or uid == SELLER_ID:
         return staff_kb()
-    if uid == SELLER_ID:
-        return seller_kb()
     return main_kb()

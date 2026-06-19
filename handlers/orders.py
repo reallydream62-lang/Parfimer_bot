@@ -204,5 +204,4 @@ def register_orders(dp):
         )
 
         await state.finish()
-        kb = seller_kb() if is_seller(msg.from_user.id) else staff_kb()
-        await msg.answer("🚚 Yo'lga chiqdi!", reply_markup=kb)
+        await msg.answer("🚚 Yo'lga chiqdi!", reply_markup=staff_kb())
