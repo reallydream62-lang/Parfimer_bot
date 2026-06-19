@@ -45,10 +45,6 @@ class CancelledError(Exception):
     pass
 
 # ── Bot va Dispatcher ────────────────────────────
-bot = Bot(token=BOT_TOKEN, parse_mode="HTML")
-
-
-# ── Bot va Dispatcher ────────────────────────────
 bot     = Bot(token=BOT_TOKEN, parse_mode="HTML")
 storage = MemoryStorage()
 dp      = Dispatcher(bot, storage=storage)

@@ -16,6 +16,9 @@ SELLER_USERNAME = os.environ.get("SELLER_USERNAME", "@Musokhan_0")
 DATABASE_URL = os.environ.get("DATABASE_URL", "")
 
 # ── Redis (FSM storage) ──────────────────────────
+# Eslatma: hozircha bot MemoryStorage ishlatadi (main.py), shuning uchun
+# REDIS_URL majburiy emas. Agar kelajakda Redis-FSM ga o'tilsa, shu yerga
+# qaytarib qo'shiladi.
 REDIS_URL = os.environ.get("REDIS_URL", "")
 
 # ── Biznes ───────────────────────────────────────
@@ -26,8 +29,6 @@ if not BOT_TOKEN:
     raise ValueError("BOT_TOKEN environment variable not set!")
 if not DATABASE_URL:
     raise ValueError("DATABASE_URL environment variable not set!")
-if not REDIS_URL:
-    raise ValueError("REDIS_URL environment variable not set!")
 
 # ── Logging ──────────────────────────────────────
 logging.basicConfig(
