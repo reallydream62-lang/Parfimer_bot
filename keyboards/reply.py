@@ -16,6 +16,13 @@ def main_kb():
 
 
 def staff_kb():
+    """
+    Yagona boshqaruv paneli — Admin va Sotuvchi uchun bitta xil menyu.
+    Eslatma: oldin staff_kb() va seller_kb() alohida edi, bu ikkalasi
+    bitta odamda chalkashib ketishiga (bug) sabab bo'lgan. Endi faqat
+    bitta funksiya bor, hamma xodim (admin yoki sotuvchi) bir xil
+    to'liq panelni ko'radi.
+    """
     kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
     kb.add("📋 Buyurtmalar", "📊 Statistika")
     kb.add("📦 Mahsulotlar", "📂 Kategoriyalar")
@@ -24,11 +31,8 @@ def staff_kb():
 
 
 def seller_kb():
-    """Sotuvchi uchun — faqat buyurtmalar."""
-    kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    kb.add("📋 Buyurtmalar", "📊 Statistika")
-    kb.add("📢 Xabar yuborish", "📞 Aloqa")
-    return kb
+    """Eski nom — endi staff_kb() bilan bir xil (orqaga moslik uchun saqlangan)."""
+    return staff_kb()
 
 
 def back_kb():
