@@ -69,6 +69,30 @@ async def db_get_all_users():
         logger.error(f"db_get_all_users: {e}"); return []
 
 
+async def db_get_users_with_order_count():
+    """
+    Admin panel uchun — har bir mijozni, nechta buyurtma qilgani va
+    eng oxirgi buyurtma sanasi bilan birga qaytaradi (eng faollardan
+    boshlab). Bloklanganlar ham ko'rinadi (is_banned bilan belgilanadi).
+    """
+    try:
+        pool = get_pool()
+        async with pool.acquire() as conn:
+            rows = await conn.fetch("""
+                SELECT u.id, u.full_name, u.username, u.phone,
+                       u.joined_at, u.is_banned,
+                       COUNT(o.id) AS order_count,
+                       MAX(o.created_at) AS last_order_at
+                FROM users u
+                LEFT JOIN orders o ON o.user_id = u.id
+                GROUP BY u.id
+                ORDER BY order_count DESC, u.joined_at DESC
+            """)
+            return [dict(r) for r in rows]
+    except Exception as e:
+        logger.error(f"db_get_users_with_order_count: {e}"); return []
+
+
 async def db_get_stats():
     try:
         pool = get_pool()
