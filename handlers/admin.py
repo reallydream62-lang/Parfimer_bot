@@ -20,7 +20,7 @@ from keyboards.reply import (
     skip_kb, skip_photo_kb, yes_no_kb, edit_field_kb,
     variants_remove_kb
 )
-from keyboards.inline import order_inline_kb
+from keyboards.inline import order_inline_kb, admin_product_row_kb, admin_user_row_kb
 from db.products import (
     db_get_categories, db_get_subcategories,
     db_get_products, db_get_product, db_search_products,
@@ -32,7 +32,7 @@ from db.products import (
     db_delete_category, db_delete_subcategory
 )
 from db.orders import db_get_all_orders, db_get_order
-from db.users import db_get_all_users, db_get_stats, db_ban_user
+from db.users import db_get_all_users, db_get_stats, db_ban_user, db_get_users_with_order_count
 from utils.excel import export_orders_excel
 
 logger = logging.getLogger(__name__)
@@ -115,7 +115,7 @@ def register_admin(dp):
         if not prods:
             await msg.answer("Mahsulotlar yo'q.", reply_markup=staff_kb())
             return
-        lines = [f"📦 <b>Jami: {len(prods)} ta</b>\n"]
+        await msg.answer(f"📦 <b>Jami: {len(prods)} ta</b>", parse_mode="HTML")
         for p in prods:
             ic     = "🖼" if p.get("photo_id") else "📄"
             var    = "🎨" if p.get("has_variants") else ""
@@ -123,15 +123,107 @@ def register_admin(dp):
             active = "" if p.get("is_active", True) else " ⛔"
             disc   = " 🔥" if p.get("old_price") else ""
             stock  = f" [{p['stock']} ta]" if p.get("stock") is not None else ""
-            lines.append(
+            text = (
                 f"{ic}{var} <b>#{p['id']} {p['name']}</b>{active}{disc}\n"
                 f"   📂 {p.get('cat_name','—')}{sub} | "
                 f"💰 {p['price']:,} so'm{stock}"
             )
-        await msg.answer(
-            "\n\n".join(lines),
-            reply_markup=staff_kb(), parse_mode="HTML"
+            await msg.answer(text, reply_markup=admin_product_row_kb(p['id']), parse_mode="HTML")
+        await msg.answer("👆 Har bir mahsulot ostida tugmalar orqali boshqaring.", reply_markup=staff_kb())
+
+    # ── Mahsulot tugmalari: Tahrirlash / Nusxalash / O'chirish ──
+    @dp.callback_query_handler(lambda c: c.data.startswith("padm_dup_"))
+    async def padm_duplicate(call: types.CallbackQuery):
+        if not is_admin(call.from_user.id):
+            await call.answer("Ruxsat yo'q", show_alert=True); return
+        pid = int(call.data.split("_")[-1])
+        new_pid = await db_duplicate_product(pid)
+        if new_pid:
+            await call.answer(f"✅ Nusxalandi: #{new_pid}", show_alert=True)
+        else:
+            await call.answer("❌ Xatolik yuz berdi", show_alert=True)
+
+    @dp.callback_query_handler(lambda c: c.data.startswith("padm_del_"))
+    async def padm_delete_confirm(call: types.CallbackQuery):
+        if not is_admin(call.from_user.id):
+            await call.answer("Ruxsat yo'q", show_alert=True); return
+        pid = int(call.data.split("_")[-1])
+        kb = types.InlineKeyboardMarkup(row_width=2)
+        kb.add(
+            types.InlineKeyboardButton("✅ Ha, o'chir", callback_data=f"padm_delyes_{pid}"),
+            types.InlineKeyboardButton("❌ Bekor",      callback_data=f"padm_delno_{pid}")
         )
+        await call.message.answer(f"#{pid} mahsulotni o'chirishni tasdiqlaysizmi?", reply_markup=kb)
+        await call.answer()
+
+    @dp.callback_query_handler(lambda c: c.data.startswith("padm_delyes_"))
+    async def padm_delete_yes(call: types.CallbackQuery):
+        if not is_admin(call.from_user.id):
+            await call.answer("Ruxsat yo'q", show_alert=True); return
+        pid = int(call.data.split("_")[-1])
+        ok = await db_delete_product(pid)
+        await call.message.edit_text(
+            f"🗑 #{pid} o'chirildi." if ok else f"❌ #{pid} o'chirishda xatolik."
+        )
+        await call.answer()
+
+    @dp.callback_query_handler(lambda c: c.data.startswith("padm_delno_"))
+    async def padm_delete_no(call: types.CallbackQuery):
+        await call.message.edit_text("Bekor qilindi.")
+        await call.answer()
+
+    @dp.callback_query_handler(lambda c: c.data.startswith("padm_edit_"))
+    async def padm_edit_hint(call: types.CallbackQuery):
+        if not is_admin(call.from_user.id):
+            await call.answer("Ruxsat yo'q", show_alert=True); return
+        pid = int(call.data.split("_")[-1])
+        await call.message.answer(f"✏️ Tahrirlash uchun yozing: /edit {pid}")
+        await call.answer()
+
+    # ── 👥 Mijozlar ro'yxati ──────────────────────
+    @dp.message_handler(lambda m: m.text == "👥 Mijozlar" and is_admin(m.from_user.id), state="*")
+    async def admin_users(msg: types.Message, state: FSMContext):
+        await state.finish()
+        users = await db_get_users_with_order_count()
+        if not users:
+            await msg.answer("Mijozlar yo'q.", reply_markup=staff_kb())
+            return
+        await msg.answer(f"👥 <b>Jami: {len(users)} ta mijoz</b>", parse_mode="HTML")
+        for u in users[:50]:  # bir martada juda ko'p xabar yubormaslik uchun cheklov
+            name    = u.get("full_name") or "—"
+            uname   = f"@{u['username']}" if u.get("username") else "—"
+            phone   = u.get("phone") or "—"
+            status  = "🚫 Bloklangan" if u.get("is_banned") else "✅ Faol"
+            joined  = u["joined_at"].strftime("%d.%m.%Y") if u.get("joined_at") else "—"
+            last    = u["last_order_at"].strftime("%d.%m.%Y") if u.get("last_order_at") else "Hali yo'q"
+            text = (
+                f"👤 <b>{name}</b> ({uname})\n"
+                f"   🆔 <code>{u['id']}</code> | 📱 {phone}\n"
+                f"   🛍 Buyurtmalar: <b>{u['order_count']}</b> | Oxirgisi: {last}\n"
+                f"   📅 Qo'shildi: {joined} | {status}"
+            )
+            await msg.answer(text, reply_markup=admin_user_row_kb(u['id'], u.get('is_banned', False)), parse_mode="HTML")
+        if len(users) > 50:
+            await msg.answer(f"… va yana {len(users) - 50} ta mijoz (faqat eng faol 50 tasi ko'rsatildi).")
+        await msg.answer("👆 Har bir mijoz ostida bloklash tugmasi bor.", reply_markup=staff_kb())
+
+    @dp.callback_query_handler(lambda c: c.data.startswith("uadm_ban_"))
+    async def uadm_ban(call: types.CallbackQuery):
+        if not is_admin(call.from_user.id):
+            await call.answer("Ruxsat yo'q", show_alert=True); return
+        uid = int(call.data.split("_")[-1])
+        await db_ban_user(uid, True)
+        await call.message.edit_reply_markup(reply_markup=admin_user_row_kb(uid, True))
+        await call.answer("🚫 Bloklandi")
+
+    @dp.callback_query_handler(lambda c: c.data.startswith("uadm_unban_"))
+    async def uadm_unban(call: types.CallbackQuery):
+        if not is_admin(call.from_user.id):
+            await call.answer("Ruxsat yo'q", show_alert=True); return
+        uid = int(call.data.split("_")[-1])
+        await db_ban_user(uid, False)
+        await call.message.edit_reply_markup(reply_markup=admin_user_row_kb(uid, False))
+        await call.answer("✅ Blokdan chiqarildi")
 
     # ── 📂 Kategoriyalar ──────────────────────────
     @dp.message_handler(lambda m: m.text == "📂 Kategoriyalar" and is_admin(m.from_user.id), state="*")
