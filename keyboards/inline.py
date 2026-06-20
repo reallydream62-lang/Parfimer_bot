@@ -120,3 +120,32 @@ def fav_inline_kb(pid: int, is_fav: bool):
         types.InlineKeyboardButton(fav, callback_data=f"fav_{pid}")
     )
     return kb
+
+
+def admin_product_row_kb(pid: int):
+    """
+    Admin uchun — har bir mahsulot ro'yxatidagi qatori ostiga
+    qo'yiladigan boshqaruv tugmalari. Endi /duplicate, /delete kabi
+    buyruqlarni qo'lda yozish shart emas, faqat bosish kifoya.
+    """
+    kb = types.InlineKeyboardMarkup(row_width=3)
+    kb.add(
+        types.InlineKeyboardButton("✏️ Tahrirlash", callback_data=f"padm_edit_{pid}"),
+        types.InlineKeyboardButton("📑 Nusxalash",  callback_data=f"padm_dup_{pid}"),
+        types.InlineKeyboardButton("🗑 O'chirish",   callback_data=f"padm_del_{pid}"),
+    )
+    return kb
+
+
+def admin_user_row_kb(uid: int, is_banned: bool):
+    """Admin uchun — har bir mijoz qatori ostidagi bloklash tugmasi."""
+    kb = types.InlineKeyboardMarkup(row_width=1)
+    if is_banned:
+        kb.add(types.InlineKeyboardButton(
+            "✅ Blokdan chiqarish", callback_data=f"uadm_unban_{uid}"
+        ))
+    else:
+        kb.add(types.InlineKeyboardButton(
+            "🚫 Bloklash", callback_data=f"uadm_ban_{uid}"
+        ))
+    return kb

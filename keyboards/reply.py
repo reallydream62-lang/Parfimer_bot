@@ -26,7 +26,8 @@ def staff_kb():
     kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
     kb.add("📋 Buyurtmalar", "📊 Statistika")
     kb.add("📦 Mahsulotlar", "📂 Kategoriyalar")
-    kb.add("📢 Xabar yuborish", "📞 Aloqa")
+    kb.add("👥 Mijozlar", "📢 Xabar yuborish")
+    kb.add("📞 Aloqa")
     return kb
 
 
