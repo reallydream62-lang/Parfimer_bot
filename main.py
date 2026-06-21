@@ -77,6 +77,37 @@ storage = MemoryStorage()
 dp      = Dispatcher(bot, storage=storage)
 
 
+# ════════════════════════════════════════════════
+#  Global xato boshqaruvchi
+# ════════════════════════════════════════════════
+# Agar istalgan handler ichida kutilmagan xato chiqsa (masalan, Telegram
+# API vaqtinchalik ishlamasa, yoki kod ichida nazorat qilinmagan xato
+# bo'lsa), bot BUTUNLAY TO'XTAMAYDI — faqat o'sha bitta xabar
+# o'tkazib yuboriladi, xato log'ga yoziladi, va foydalanuvchiga
+# tushunarli xabar ko'rsatiladi. Boshqa foydalanuvchilar bundan
+# ta'sirlanmaydi, bot ishlashda davom etadi.
+@dp.errors_handler()
+async def global_error_handler(update, exception):
+    logger.error(
+        f"Kutilmagan xato: {exception} | Update: {update}",
+        exc_info=True
+    )
+    try:
+        if update.message:
+            await update.message.answer(
+                "⚠️ Kechirasiz, vaqtinchalik xatolik yuz berdi. "
+                "Iltimos, qaytadan urinib ko'ring yoki /start bosing."
+            )
+        elif update.callback_query:
+            await update.callback_query.answer(
+                "⚠️ Xatolik yuz berdi, qayta urinib ko'ring.",
+                show_alert=True
+            )
+    except Exception as inner:
+        logger.error(f"Xato xabarini yuborishda ham muammo: {inner}")
+    return True  # xato "yutildi", bot ishlashda davom etadi
+
+
 def register_all(dp):
     register_common(dp)
     register_user(dp)
