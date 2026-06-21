@@ -5,7 +5,7 @@
 import re
 import logging
 from aiogram import Bot, types
-from config import ADMIN_ID, SELLER_ID, SELLER_USERNAME
+from config import ADMIN_ID
 from db.products import (
     db_get_product_photos, db_is_favorite,
     db_add_last_seen
@@ -25,11 +25,9 @@ STATUS_ICONS = {
 def is_admin(uid: int) -> bool:
     return uid == ADMIN_ID
 
-def is_seller(uid: int) -> bool:
-    return uid == SELLER_ID
-
 def is_staff(uid: int) -> bool:
-    return uid in (ADMIN_ID, SELLER_ID)
+    """Solo versiyada xodim = admin. (Team versiyada Sotuvchi ham qo'shiladi.)"""
+    return uid == ADMIN_ID
 
 def validate_phone(phone: str) -> bool:
     cleaned = re.sub(r"[\s\-\(\)]", "", phone)
