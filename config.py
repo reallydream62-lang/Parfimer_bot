@@ -1,5 +1,5 @@
 # ================================================
-# 🌸 SIFAT PARFIMER SHOP BOT
+# ✨ BOTFORGE — DEMO DO'KON BOTI
 # config.py — barcha sozlamalar
 # ================================================
 
