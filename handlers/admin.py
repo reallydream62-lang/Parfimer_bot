@@ -9,11 +9,12 @@
 import asyncio
 import re
 import logging
+from datetime import datetime
 from aiogram import types
 from aiogram.dispatcher import FSMContext
 from aiogram.dispatcher.filters.state import State, StatesGroup
 
-from config import ADMIN_ID, SELLER_ID
+from config import ADMIN_ID
 from utils.helpers import is_admin, is_staff, send_order_info, STATUS_ICONS
 from keyboards.reply import (
     staff_kb, back_kb, cats_kb, subcats_kb,
@@ -34,6 +35,7 @@ from db.products import (
 from db.orders import db_get_all_orders, db_get_order
 from db.users import db_get_all_users, db_get_stats, db_ban_user, db_get_users_with_order_count
 from utils.excel import export_orders_excel
+from utils.backup import export_full_backup
 
 logger = logging.getLogger(__name__)
 
@@ -257,6 +259,44 @@ def register_admin(dp):
             f"💰 Daromad: <b>{s['revenue']:,} so'm</b>"
         )
         await msg.answer(text, reply_markup=staff_kb(), parse_mode="HTML")
+
+    # ── 💾 Bekap olish ────────────────────────────
+    @dp.message_handler(lambda m: m.text == "💾 Bekap olish" and is_admin(m.from_user.id), state="*")
+    async def admin_backup(msg: types.Message, state: FSMContext):
+        await state.finish()
+        wait_msg = await msg.answer("⏳ Bekap tayyorlanmoqda, biroz kuting...")
+        try:
+            buf = await export_full_backup()
+            if not buf:
+                await wait_msg.edit_text("❌ Bekap yaratib bo'lmadi yoki baza bo'sh.")
+                return
+            date_str = datetime.now().strftime("%Y-%m-%d_%H-%M")
+            await msg.answer_document(
+                types.InputFile(buf, filename=f"backup_{date_str}.xlsx"),
+                caption=f"💾 To'liq bekap — {date_str}"
+            )
+            await wait_msg.delete()
+        except Exception as e:
+            logger.error(f"admin_backup: {e}")
+            await wait_msg.edit_text("❌ Bekap olishda xatolik yuz berdi.")
+
+    # ── /order — bitta buyurtma tafsilotini ko'rish ──
+    @dp.message_handler(commands=["order"])
+    async def admin_order_detail(msg: types.Message):
+        if not is_admin(msg.from_user.id):
+            return
+        args = msg.get_args()
+        if not args or not args.isdigit():
+            await msg.answer("Ishlatish: /order 5")
+            return
+        order = await db_get_order(int(args))
+        if not order:
+            await msg.answer("Buyurtma topilmadi.")
+            return
+        markup = None
+        if order["status"] in ("kutilmoqda", "qabul qilindi"):
+            markup = order_inline_kb(order["id"], order["status"])
+        await send_order_info(msg.bot, msg.chat.id, order, markup=markup)
 
     # ── 📋 Buyurtmalar ────────────────────────────
     @dp.message_handler(lambda m: m.text == "📋 Buyurtmalar" and is_admin(m.from_user.id), state="*")

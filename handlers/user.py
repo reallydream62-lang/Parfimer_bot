@@ -8,8 +8,8 @@ import logging
 from aiogram import types
 from aiogram.dispatcher import FSMContext
 
-from utils.helpers import is_admin, is_seller, send_product_card
-from keyboards.reply import main_kb, staff_kb, seller_kb, back_kb
+from utils.helpers import is_admin, send_product_card
+from keyboards.reply import main_kb, staff_kb, back_kb
 from keyboards.inline import product_info_inline_kb
 from db.users import db_save_user
 from db.products import db_get_favorites, db_get_last_seen, db_is_favorite
@@ -39,11 +39,6 @@ def register_user(dp):
             await msg.answer(
                 "👋 Xush kelibsiz, Admin!\n🌸 <b>Sifat Parfimer Shop</b>",
                 reply_markup=staff_kb(), parse_mode="HTML"
-            )
-        elif is_seller(uid):
-            await msg.answer(
-                "👋 Xush kelibsiz, Sotuvchi!\n🌸 <b>Sifat Parfimer Shop</b>",
-                reply_markup=seller_kb(), parse_mode="HTML"
             )
         else:
             await msg.answer(

@@ -8,12 +8,12 @@ from aiogram import types
 from aiogram.dispatcher import FSMContext
 from aiogram.dispatcher.filters.state import State, StatesGroup
 
-from config import ADMIN_ID, SELLER_ID, SELLER_USERNAME
-from utils.helpers import notify, send_order_info, is_staff, is_admin, is_seller
+from config import ADMIN_ID
+from utils.helpers import notify, send_order_info, is_staff, is_admin
 from keyboards.inline import (
     order_inline_kb, delivery_confirm_kb, admin_check_kb
 )
-from keyboards.reply import staff_kb, seller_kb, skip_kb
+from keyboards.reply import staff_kb, skip_kb
 from db.orders import (
     db_get_order, db_update_order_status, db_update_order_delivery
 )
@@ -53,7 +53,7 @@ def register_orders(dp):
             await notify(
                 cb.bot, order["user_id"],
                 f"✅ Buyurtma <b>#{oid}</b> qabul qilindi!\n"
-                f"Sotuvchi siz bilan bog'lanadi: <b>{SELLER_USERNAME}</b>"
+                "Tez orada siz bilan bog'lanamiz."
             )
             try:
                 await cb.message.edit_reply_markup(
@@ -71,7 +71,7 @@ def register_orders(dp):
             await notify(
                 cb.bot, order["user_id"],
                 f"❌ Buyurtma <b>#{oid}</b> bekor qilindi.\n"
-                f"Murojaat: <b>{SELLER_USERNAME}</b>"
+                "Savollar uchun \U0001F4DE Aloqa bo'limiga murojaat qiling."
             )
             try:
                 await cb.message.edit_reply_markup(reply_markup=None)
@@ -100,10 +100,8 @@ def register_orders(dp):
                 await cb.answer("Bu sizning buyurtmangiz emas.", show_alert=True)
                 return
             await db_update_order_status(oid, "yetkazildi")
-            await notify(cb.bot, SELLER_ID,
-                f"📦 Buyurtma <b>#{oid}</b> yetkazildi! Mijoz tasdiqladi.")
             await notify(cb.bot, ADMIN_ID,
-                f"📦 Buyurtma <b>#{oid}</b> yetkazildi!")
+                f"📦 Buyurtma <b>#{oid}</b> yetkazildi! Mijoz tasdiqladi.")
             try:
                 await cb.message.edit_reply_markup(reply_markup=None)
             except Exception:
@@ -114,10 +112,8 @@ def register_orders(dp):
             if order["user_id"] != uid:
                 await cb.answer("Bu sizning buyurtmangiz emas.", show_alert=True)
                 return
-            await notify(cb.bot, SELLER_ID,
-                f"⚠️ Buyurtma <b>#{oid}</b> — mijoz hali olmagan!\n📱 {order['phone']}")
             await notify(cb.bot, ADMIN_ID,
-                f"⚠️ Buyurtma <b>#{oid}</b> — mijoz hali olmagan!")
+                f"⚠️ Buyurtma <b>#{oid}</b> — mijoz hali olmagan!\n📱 {order['phone']}")
             try:
                 await cb.message.edit_reply_markup(reply_markup=None)
             except Exception:
@@ -136,7 +132,7 @@ def register_orders(dp):
             await cb.answer("✅ Mijozga so'rov yuborildi.", show_alert=True)
 
         elif action == "problem" and is_admin(uid):
-            await notify(cb.bot, SELLER_ID,
+            await notify(cb.bot, ADMIN_ID,
                 f"⚠️ Buyurtma <b>#{oid}</b> bo'yicha muammo!")
             try:
                 await cb.message.edit_reply_markup(reply_markup=None)
@@ -190,7 +186,6 @@ def register_orders(dp):
             lines.append(f"💳 Jami: <b>{total:,} so'm</b>")
         if delivery_time:
             lines.append(f"🕐 Taxminiy vaqt: <b>{delivery_time}</b>")
-        lines.append(f"\nSotuvchi: <b>{SELLER_USERNAME}</b>")
 
         await notify(msg.bot, order["user_id"], "\n".join(lines))
 

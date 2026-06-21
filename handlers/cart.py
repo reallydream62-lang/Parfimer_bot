@@ -7,7 +7,7 @@ from aiogram import types
 from aiogram.dispatcher import FSMContext
 from aiogram.dispatcher.filters.state import State, StatesGroup
 
-from config import SELLER_USERNAME, MIN_ORDER_SUM
+from config import MIN_ORDER_SUM
 from utils.helpers import notify, validate_phone, send_order_info, is_staff
 from keyboards.reply import (
     main_kb, back_kb, cart_main_kb, confirm_kb,
@@ -20,7 +20,7 @@ from db.carts import (
 )
 from db.orders import db_create_order, db_get_order
 from db.users import db_save_user
-from config import ADMIN_ID, SELLER_ID
+from config import ADMIN_ID
 
 logger = logging.getLogger(__name__)
 
@@ -226,7 +226,7 @@ async def _show_cart_msg(msg: types.Message):
     if not text:
         await msg.answer("🧺 Savatingiz bo'sh.", reply_markup=main_kb())
         return
-    text += f"\n\n📞 Tasdiqlangach sotuvchi <b>{SELLER_USERNAME}</b> bilan bog'lanadi"
+    text += "\n\n📞 Tasdiqlangach siz bilan bog'lanamiz"
     await msg.answer(text, reply_markup=cart_main_kb(), parse_mode="HTML")
 
 
@@ -260,14 +260,13 @@ async def _finish_order(msg, state, data):
     await state.finish()
 
     await send_order_info(
-        msg.bot, SELLER_ID, order,
+        msg.bot, ADMIN_ID, order,
         markup=order_inline_kb(oid, "kutilmoqda")
     )
-    await send_order_info(msg.bot, ADMIN_ID, order)
 
     await msg.answer(
         f"✅ Buyurtma <b>#{oid}</b> qabul qilindi!\n"
-        f"Sotuvchi ko'rib chiqadi va yetkazib berish narxini bildiradi. 🌸",
+        f"Tez orada ko'rib chiqamiz va yetkazib berish narxini bildiramiz. 🌸",
         reply_markup=main_kb(), parse_mode="HTML"
     )
 
@@ -278,16 +277,15 @@ async def _send_req(msg, state, name, photo_id):
         f"👤 {msg.from_user.full_name} (ID: {msg.from_user.id})\n"
         f"🔖 <b>{name}</b>"
     )
-    for uid in (SELLER_ID, ADMIN_ID):
-        try:
-            if photo_id:
-                await msg.bot.send_photo(
-                    uid, photo_id,
-                    caption=text, parse_mode="HTML"
-                )
-            else:
-                await msg.bot.send_message(uid, text, parse_mode="HTML")
-        except Exception as e:
-            logger.warning(f"_send_req: {e}")
+    try:
+        if photo_id:
+            await msg.bot.send_photo(
+                ADMIN_ID, photo_id,
+                caption=text, parse_mode="HTML"
+            )
+        else:
+            await msg.bot.send_message(ADMIN_ID, text, parse_mode="HTML")
+    except Exception as e:
+        logger.warning(f"_send_req: {e}")
     await state.finish()
     await msg.answer("✅ So'rovingiz yuborildi! 🌸", reply_markup=main_kb())

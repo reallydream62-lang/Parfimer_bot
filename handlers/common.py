@@ -6,9 +6,8 @@ import logging
 from aiogram import types
 from aiogram.dispatcher import FSMContext
 
-from config import SELLER_USERNAME
 from utils.helpers import is_staff
-from keyboards.reply import main_kb, staff_kb, seller_kb, back_kb, cats_kb, subcats_kb
+from keyboards.reply import main_kb, staff_kb, back_kb, cats_kb, subcats_kb
 from db.products import db_get_categories, db_get_subcategories
 
 logger = logging.getLogger(__name__)
@@ -65,14 +64,15 @@ def register_common(dp):
 
     @dp.message_handler(lambda m: m.text == "📞 Aloqa", state="*")
     async def contact(msg: types.Message):
+        from config import ADMIN_USERNAME
         await msg.answer(
-            f"📞 Admin: @Musokhan_0\n🛍 Sotuvchi: {SELLER_USERNAME}",
+            f"📞 Admin: {ADMIN_USERNAME}",
             reply_markup=back_kb()
         )
 
 
 def _get_kb(uid: int):
-    from config import ADMIN_ID, SELLER_ID
-    if uid == ADMIN_ID or uid == SELLER_ID:
+    from config import ADMIN_ID
+    if uid == ADMIN_ID:
         return staff_kb()
     return main_kb()
