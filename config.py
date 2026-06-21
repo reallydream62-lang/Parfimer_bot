@@ -7,10 +7,9 @@ import os
 import logging
 
 # ── Bot ──────────────────────────────────────────
-BOT_TOKEN       = os.environ.get("BOT_TOKEN", "")
-ADMIN_ID        = int(os.environ.get("ADMIN_ID", "6170044774"))
-SELLER_ID       = int(os.environ.get("SELLER_ID", "6170044774"))
-SELLER_USERNAME = os.environ.get("SELLER_USERNAME", "@Musokhan_0")
+BOT_TOKEN      = os.environ.get("BOT_TOKEN", "")
+ADMIN_ID       = int(os.environ.get("ADMIN_ID", "6170044774"))
+ADMIN_USERNAME = os.environ.get("ADMIN_USERNAME", "@Musokhan_0")
 
 # ── Database ─────────────────────────────────────
 DATABASE_URL = os.environ.get("DATABASE_URL", "")

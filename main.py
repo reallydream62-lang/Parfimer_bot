@@ -13,19 +13,19 @@ from aiogram import Bot, Dispatcher, executor, types
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
 from aiogram.dispatcher.middlewares import BaseMiddleware
 
-from config import BOT_TOKEN, ADMIN_ID, SELLER_ID
+from config import BOT_TOKEN, ADMIN_ID
 from db.connection import create_pool, close_pool
 from db.init_db import init_db
 from db.orders import db_get_inactive_cart_users
 from db.users import db_get_stats, db_get_daily_report, db_is_banned
 from db.carts import cart_get, cart_total
+from utils.backup import export_full_backup
 
 from handlers.common  import register_common
 from handlers.user    import register_user
 from handlers.browse  import register_browse
 from handlers.cart    import register_cart
 from handlers.orders  import register_orders
-from handlers.seller  import register_seller
 from handlers.admin   import register_admin
 
 logger = logging.getLogger(__name__)
@@ -114,7 +114,6 @@ def register_all(dp):
     register_browse(dp)
     register_cart(dp)
     register_orders(dp)
-    register_seller(dp)
     register_admin(dp)
 
 
@@ -145,7 +144,33 @@ async def cart_reminder():
             logger.error(f"cart_reminder: {e}")
 
 
-async def daily_report():
+async def daily_backup():
+    """
+    Har kuni soat 03:00 da (tunda, kam yuklama paytida) butun bazaning
+    to'liq Excel bekap nusxasini Admin'ga Telegram orqali yuboradi.
+    Agar baza biror sababdan yo'qolib qolsa, shu fayl orqali ma'lumotlarni
+    qo'lda qayta tiklash mumkin bo'ladi.
+    """
+    while True:
+        now      = datetime.now()
+        next_run = now.replace(hour=3, minute=0, second=0, microsecond=0)
+        if now >= next_run:
+            next_run += timedelta(days=1)
+        wait = (next_run - now).total_seconds()
+        await asyncio.sleep(wait)
+        try:
+            backup_file = await export_full_backup()
+            if backup_file:
+                date_str = datetime.now().strftime("%Y-%m-%d")
+                await bot.send_document(
+                    ADMIN_ID,
+                    types.InputFile(backup_file, filename=f"backup_{date_str}.xlsx"),
+                    caption=f"💾 Kunlik avtomatik bekap — {date_str}"
+                )
+            else:
+                logger.warning("daily_backup: bekap fayli bo'sh yoki yaratilmadi")
+        except Exception as e:
+            logger.error(f"daily_backup: {e}")
     """Har kuni soat 20:00 da sotuvchi va adminga hisobot."""
     while True:
         now      = datetime.now()
@@ -164,11 +189,10 @@ async def daily_report():
                 f"⏳ Kutilayotgan: <b>{stats['pending']}</b>\n"
                 f"👥 Jami foydalanuvchilar: <b>{stats['users']}</b>"
             )
-            for uid in (SELLER_ID, ADMIN_ID):
-                try:
-                    await bot.send_message(uid, text)
-                except Exception:
-                    pass
+            try:
+                await bot.send_message(ADMIN_ID, text)
+            except Exception:
+                pass
         except Exception as e:
             logger.error(f"daily_report: {e}")
 
@@ -184,6 +208,7 @@ async def on_startup(dp):
     register_all(dp)
     asyncio.create_task(cart_reminder())
     asyncio.create_task(daily_report())
+    asyncio.create_task(daily_backup())
     logger.info("🌸 Sifat Parfimer Shop ishga tushdi!")
 
 
