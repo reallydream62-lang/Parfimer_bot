@@ -171,7 +171,10 @@ async def daily_backup():
                 logger.warning("daily_backup: bekap fayli bo'sh yoki yaratilmadi")
         except Exception as e:
             logger.error(f"daily_backup: {e}")
-    """Har kuni soat 20:00 da sotuvchi va adminga hisobot."""
+
+
+async def daily_report():
+    """Har kuni soat 20:00 da adminga hisobot."""
     while True:
         now      = datetime.now()
         next_run = now.replace(hour=20, minute=0, second=0, microsecond=0)
