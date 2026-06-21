@@ -19,40 +19,49 @@ def register_common(dp):
     @dp.message_handler(lambda m: m.text == "🔙 Orqaga", state="*")
     async def go_back(msg: types.Message, state: FSMContext):
         from handlers.browse import Browse
-        current = await state.get_state()
-        data    = await state.get_data()
+        try:
+            current = await state.get_state()
+            data    = await state.get_data()
 
-        if current == Browse.prod.state:
-            cat_id = data.get("cat_id")
-            if cat_id:
-                subs = await db_get_subcategories(cat_id)
-                if subs:
-                    await Browse.sub.set()
-                    await msg.answer(
-                        f"<b>{data.get('cat_name','')}</b> — bo'limini tanlang:",
-                        reply_markup=subcats_kb(subs), parse_mode="HTML"
-                    )
-                    return
-            await Browse.cat.set()
-            cats = await db_get_categories()
-            await msg.answer("Kategoriyani tanlang:", reply_markup=cats_kb(cats))
-            return
+            if current == Browse.prod.state:
+                cat_id = data.get("cat_id")
+                if cat_id:
+                    subs = await db_get_subcategories(cat_id)
+                    if subs:
+                        await Browse.sub.set()
+                        await msg.answer(
+                            f"<b>{data.get('cat_name','')}</b> — bo'limini tanlang:",
+                            reply_markup=subcats_kb(subs), parse_mode="HTML"
+                        )
+                        return
+                await Browse.cat.set()
+                cats = await db_get_categories()
+                await msg.answer("Kategoriyani tanlang:", reply_markup=cats_kb(cats))
+                return
 
-        if current == Browse.sub.state:
-            await Browse.cat.set()
-            cats = await db_get_categories()
-            await msg.answer("Kategoriyani tanlang:", reply_markup=cats_kb(cats))
-            return
+            if current == Browse.sub.state:
+                await Browse.cat.set()
+                cats = await db_get_categories()
+                await msg.answer("Kategoriyani tanlang:", reply_markup=cats_kb(cats))
+                return
 
-        if current == Browse.cat.state:
+            if current == Browse.cat.state:
+                await state.finish()
+                kb = _get_kb(msg.from_user.id)
+                await msg.answer("Asosiy menyu:", reply_markup=kb)
+                return
+
             await state.finish()
             kb = _get_kb(msg.from_user.id)
             await msg.answer("Asosiy menyu:", reply_markup=kb)
-            return
-
-        await state.finish()
-        kb = _get_kb(msg.from_user.id)
-        await msg.answer("Asosiy menyu:", reply_markup=kb)
+        except Exception as e:
+            logger.error(f"go_back: {e}")
+            await state.finish()
+            kb = _get_kb(msg.from_user.id)
+            await msg.answer(
+                "⚠️ Xatolik yuz berdi, asosiy menyuga qaytdik.",
+                reply_markup=kb
+            )
 
     @dp.message_handler(lambda m: m.text == "📞 Aloqa", state="*")
     async def contact(msg: types.Message):

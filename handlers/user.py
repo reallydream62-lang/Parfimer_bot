@@ -23,11 +23,17 @@ def register_user(dp):
     @dp.message_handler(commands=["start"], state="*")
     async def cmd_start(msg: types.Message, state: FSMContext):
         await state.finish()
-        await db_save_user(
-            msg.from_user.id,
-            msg.from_user.full_name,
-            msg.from_user.username
-        )
+        try:
+            await db_save_user(
+                msg.from_user.id,
+                msg.from_user.full_name,
+                msg.from_user.username
+            )
+        except Exception as e:
+            logger.error(f"cmd_start: db_save_user xatosi: {e}")
+            # Baza vaqtinchalik javob bermasa ham, foydalanuvchi
+            # botdan butunlay foydalana olmay qolmasligi uchun davom etamiz
+
         uid = msg.from_user.id
         if is_admin(uid):
             await msg.answer(
@@ -51,8 +57,17 @@ def register_user(dp):
     @dp.message_handler(lambda m: m.text == "❤️ Sevimlilar", state="*")
     async def favorites_list(msg: types.Message, state: FSMContext):
         await state.finish()
-        uid   = msg.from_user.id
-        prods = await db_get_favorites(uid)
+        uid = msg.from_user.id
+        try:
+            prods = await db_get_favorites(uid)
+        except Exception as e:
+            logger.error(f"favorites_list: {e}")
+            await msg.answer(
+                "⚠️ Sevimlilarni yuklashda xatolik. Birozdan keyin qayta urinib ko'ring.",
+                reply_markup=main_kb()
+            )
+            return
+
         if not prods:
             await msg.answer(
                 "❤️ Sevimlilar ro'yxatingiz bo'sh.",
@@ -64,20 +79,35 @@ def register_user(dp):
             reply_markup=main_kb(), parse_mode="HTML"
         )
         for p in prods:
-            is_fav = await db_is_favorite(uid, p["id"])
-            await send_product_card(
-                msg.bot, msg.chat.id, p,
-                reply_markup=product_info_inline_kb(p["id"], is_fav),
-                uid=uid
-            )
+            try:
+                is_fav = await db_is_favorite(uid, p["id"])
+                await send_product_card(
+                    msg.bot, msg.chat.id, p,
+                    reply_markup=product_info_inline_kb(p["id"], is_fav),
+                    uid=uid
+                )
+            except Exception as e:
+                # Bitta mahsulot kartasi xato bersa ham, qolganlari
+                # ko'rsatilishda davom etadi — butun ro'yxat to'xtamaydi
+                logger.error(f"favorites_list: kartani yuborishda xato (pid={p.get('id')}): {e}")
+                continue
             await asyncio.sleep(0.05)
 
     # ── 🕐 Oxirgi ko'rilganlar ───────────────────
     @dp.message_handler(lambda m: m.text == "🕐 Oxirgi ko'rilganlar", state="*")
     async def last_seen_list(msg: types.Message, state: FSMContext):
         await state.finish()
-        uid   = msg.from_user.id
-        prods = await db_get_last_seen(uid, 5)
+        uid = msg.from_user.id
+        try:
+            prods = await db_get_last_seen(uid, 5)
+        except Exception as e:
+            logger.error(f"last_seen_list: {e}")
+            await msg.answer(
+                "⚠️ Ro'yxatni yuklashda xatolik. Birozdan keyin qayta urinib ko'ring.",
+                reply_markup=main_kb()
+            )
+            return
+
         if not prods:
             await msg.answer(
                 "🕐 Hali hech narsa ko'rmadingiz.",
@@ -89,10 +119,14 @@ def register_user(dp):
             reply_markup=main_kb(), parse_mode="HTML"
         )
         for p in prods:
-            is_fav = await db_is_favorite(uid, p["id"])
-            await send_product_card(
-                msg.bot, msg.chat.id, p,
-                reply_markup=product_info_inline_kb(p["id"], is_fav),
-                uid=uid
-            )
+            try:
+                is_fav = await db_is_favorite(uid, p["id"])
+                await send_product_card(
+                    msg.bot, msg.chat.id, p,
+                    reply_markup=product_info_inline_kb(p["id"], is_fav),
+                    uid=uid
+                )
+            except Exception as e:
+                logger.error(f"last_seen_list: kartani yuborishda xato (pid={p.get('id')}): {e}")
+                continue
             await asyncio.sleep(0.05)
