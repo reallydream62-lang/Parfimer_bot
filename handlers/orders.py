@@ -153,6 +153,12 @@ def register_orders(dp):
                 await msg.answer("⚠️ Faqat raqam kiriting. Masalan: 15000")
                 return
             delivery_price = int(txt)
+            if delivery_price > 10_000_000:
+                await msg.answer(
+                    "⚠️ Narx juda katta ko'rinmoqda (10 mln so'mdan oshmasligi kerak). "
+                    "Iltimos, qayta tekshirib kiriting."
+                )
+                return
         await state.update_data(ship_delivery_price=delivery_price)
         await ShipOrder.delivery_time.set()
         await msg.answer(
