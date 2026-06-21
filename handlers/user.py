@@ -37,13 +37,15 @@ def register_user(dp):
         uid = msg.from_user.id
         if is_admin(uid):
             await msg.answer(
-                "👋 Xush kelibsiz, Admin!\n🌸 <b>Sifat Parfimer Shop</b>",
+                "👋 Xush kelibsiz, Admin!\n🛍 <b>BotForge — Demo Do'kon</b>",
                 reply_markup=staff_kb(), parse_mode="HTML"
             )
         else:
             await msg.answer(
                 "👋 Assalomu alaykum!\n"
-                "🌸 <b>Sifat Parfimer Shop</b>ga xush kelibsiz!\n\n"
+                "🛍 <b>BotForge — Demo Do'kon</b>ga xush kelibsiz!\n\n"
+                "Bu — Telegram-bot orqali ishlaydigan onlayn-do'kon namunasi. "
+                "Mahsulotlarni ko'ring, savatga soling, sinov uchun buyurtma bering!\n\n"
                 "Quyidagi menyudan tanlang:",
                 reply_markup=main_kb(), parse_mode="HTML"
             )

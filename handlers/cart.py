@@ -266,7 +266,7 @@ async def _finish_order(msg, state, data):
 
     await msg.answer(
         f"✅ Buyurtma <b>#{oid}</b> qabul qilindi!\n"
-        f"Tez orada ko'rib chiqamiz va yetkazib berish narxini bildiramiz. 🌸",
+        f"Tez orada ko'rib chiqamiz va yetkazib berish narxini bildiramiz. ✨",
         reply_markup=main_kb(), parse_mode="HTML"
     )
 
@@ -288,4 +288,4 @@ async def _send_req(msg, state, name, photo_id):
     except Exception as e:
         logger.warning(f"_send_req: {e}")
     await state.finish()
-    await msg.answer("✅ So'rovingiz yuborildi! 🌸", reply_markup=main_kb())
+    await msg.answer("✅ So'rovingiz yuborildi! ✨", reply_markup=main_kb())

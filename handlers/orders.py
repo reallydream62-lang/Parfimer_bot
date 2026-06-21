@@ -106,7 +106,7 @@ def register_orders(dp):
                 await cb.message.edit_reply_markup(reply_markup=None)
             except Exception:
                 pass
-            await cb.answer("📦 Rahmat! Xaridingiz uchun minnatdormiz! 🌸", show_alert=True)
+            await cb.answer("📦 Rahmat! Xaridingiz uchun minnatdormiz! ✨", show_alert=True)
 
         elif action == "notgot":
             if order["user_id"] != uid:
