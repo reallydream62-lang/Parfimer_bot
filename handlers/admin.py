@@ -524,15 +524,31 @@ def register_admin(dp):
 
     @dp.message_handler(state=AddProduct.variants)
     async def addprod_variants(msg: types.Message, state: FSMContext):
-        if msg.text == "⏭ Rasmsiz davom etish":
+        if msg.text in ("⏭ Rasmsiz davom etish", "⏭ O'tkazib yuborish"):
             await _save_new_product(msg, state); return
         data     = await state.get_data()
         variants = data.get("pvariants", [])
-        name, extra = _parse_variant(msg.text.strip())
-        variants.append({"name": name, "extra_price": extra})
+
+        # Bir xabarda bir nechta variant bo'lishi mumkin (har biri yangi qatorda)
+        # Masalan: "Ko'k\nQizil +5000\nYashil -3000"
+        lines = [l.strip() for l in msg.text.strip().split("\n") if l.strip()]
+        added = []
+        for line in lines:
+            name, extra = _parse_variant(line)
+            if name:
+                variants.append({"name": name, "extra_price": extra})
+                extra_text = f" ({'+' if extra>=0 else ''}{extra:,} so'm)" if extra != 0 else ""
+                added.append(f"✅ '{name}'{extra_text}")
+
         await state.update_data(pvariants=variants)
-        extra_text = f" ({'+' if extra>=0 else ''}{extra:,} so'm)" if extra != 0 else ""
-        await msg.answer(f"✅ '{name}'{extra_text} qo'shildi. Yana kiriting yoki ⏭ bosing.")
+        if added:
+            added_text = "\n".join(added)
+            await msg.answer(
+                f"{added_text}\n\n"
+                f"Jami: {len(variants)} ta tur. Yana kiriting yoki ⏭ bosing."
+            )
+        else:
+            await msg.answer("⚠️ Tur nomi bo'sh, qayta kiriting.")
 
     # ════════════════════════════════════════════
     #  /edit — mahsulot tahrirlash
