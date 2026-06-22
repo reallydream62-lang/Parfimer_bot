@@ -3,9 +3,13 @@
 # ================================================
 
 import logging
+from datetime import timezone, timedelta
 from db.connection import get_pool
 
 logger = logging.getLogger(__name__)
+
+# Toshkent vaqti = UTC + 5 soat
+TZ_TASHKENT = timezone(timedelta(hours=5))
 
 
 async def db_create_order(user_id: int, phone: str, cart: list,
@@ -36,6 +40,29 @@ async def db_create_order(user_id: int, phone: str, cart: list,
                         item["price"],
                         item.get("qty", 1)
                     )
+                    # ── Stokni kamaytirish ──────────────────────────
+                    # Agar mahsulotda stok belgilangan bo'lsa (NULL emas),
+                    # buyurtma miqdori qadar ayirib qo'yamiz.
+                    # Manfiy bo'lib ketmasligi uchun: GREATEST(stock - qty, 0)
+                    prod_id = item.get("prod_id")
+                    qty     = item.get("qty", 1)
+                    if prod_id:
+                        if item.get("variant_id"):
+                            # Variant stoki
+                            await conn.execute(
+                                "UPDATE product_variants"
+                                " SET stock = GREATEST(COALESCE(stock,0) - $1, 0)"
+                                " WHERE id = $2 AND stock IS NOT NULL",
+                                qty, item["variant_id"]
+                            )
+                        else:
+                            # Asosiy mahsulot stoki
+                            await conn.execute(
+                                "UPDATE products"
+                                " SET stock = GREATEST(COALESCE(stock,0) - $1, 0)"
+                                " WHERE id = $2 AND stock IS NOT NULL",
+                                qty, prod_id
+                            )
                 return oid
     except Exception as e:
         logger.error(f"db_create_order: {e}"); return None
@@ -60,7 +87,11 @@ async def db_get_order(oid: int):
             result = dict(order)
             result["items"] = [dict(i) for i in items]
             if result.get("created_at"):
-                result["created_at"] = str(result["created_at"])
+                # UTC dan Toshkent vaqtiga (+5 soat) o'tkazamiz
+                dt = result["created_at"]
+                if hasattr(dt, "replace"):
+                    dt = dt.replace(tzinfo=timezone.utc).astimezone(TZ_TASHKENT)
+                result["created_at"] = dt.strftime("%d.%m.%Y %H:%M")
             return result
     except Exception as e:
         logger.error(f"db_get_order: {e}"); return None
@@ -75,7 +106,14 @@ async def db_get_user_orders(uid: int):
                 " ORDER BY id DESC LIMIT 10",
                 uid
             )
-            return [dict(r) for r in rows]
+            result = []
+            for r in rows:
+                d = dict(r)
+                if d.get("created_at"):
+                    dt = d["created_at"].replace(tzinfo=timezone.utc).astimezone(TZ_TASHKENT)
+                    d["created_at"] = dt.strftime("%d.%m.%Y %H:%M")
+                result.append(d)
+            return result
     except Exception as e:
         logger.error(f"db_get_user_orders: {e}"); return []
 
@@ -91,7 +129,14 @@ async def db_get_all_orders(limit: int = 20):
                 " ORDER BY o.id DESC LIMIT $1",
                 limit
             )
-            return [dict(r) for r in rows]
+            result = []
+            for r in rows:
+                d = dict(r)
+                if d.get("created_at"):
+                    dt = d["created_at"].replace(tzinfo=timezone.utc).astimezone(TZ_TASHKENT)
+                    d["created_at"] = dt.strftime("%d.%m.%Y %H:%M")
+                result.append(d)
+            return result
     except Exception as e:
         logger.error(f"db_get_all_orders: {e}"); return []
 
