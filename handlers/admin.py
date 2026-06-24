@@ -355,6 +355,97 @@ def register_admin(dp):
         await AddProduct.cat.set()
         await msg.answer("📂 1/8 — Kategoriyani tanlang:", reply_markup=cats_kb(cats, with_new=True))
 
+    # ── /bulk — bitta xabarda mahsulot qo'shish ──
+    @dp.message_handler(commands=["bulk"])
+    async def admin_bulk(msg: types.Message, state: FSMContext):
+        if not is_admin(msg.from_user.id):
+            return
+        await state.finish()
+        await msg.answer(
+            "📋 <b>Tez qo'shish</b> — quyidagi shablon bo'yicha yuboring:\n\n"
+            "<code>Nom: Erkaklar futbolkasi\n"
+            "Narx: 120000\n"
+            "Kategoriya: Kiyimlar\n"
+            "Stok: 50\n"
+            "Tavsif: Paxtali, qulay futbolka\n"
+            "Turlar: Qizil, Ko'k +5000, Yashil -3000\n"
+            "Eski narx: 150000</code>\n\n"
+            "📌 Faqat <b>Nom</b> va <b>Narx</b> majburiy, qolganlar ixtiyoriy.\n"
+            "Tartib muhim emas, katta/kichik harf farqi yo'q.",
+            parse_mode="HTML", reply_markup=back_kb()
+        )
+        await state.set_state("bulk_input")
+
+    @dp.message_handler(state="bulk_input")
+    async def admin_bulk_input(msg: types.Message, state: FSMContext):
+        if msg.text == "🔙 Orqaga":
+            await state.finish()
+            await msg.answer("Asosiy menyu:", reply_markup=staff_kb())
+            return
+
+        parsed = _parse_bulk_product(msg.text)
+        if not parsed:
+            await msg.answer(
+                "⚠️ Matnni to'g'ri o'qib bo'lmadi.\n"
+                "Kamida <b>Nom</b> va <b>Narx</b> bo'lishi shart.\n"
+                "Qayta urinib ko'ring:", parse_mode="HTML"
+            )
+            return
+
+        # Kategoriyani nomidan topish
+        cat_id = None
+        if parsed.get("cat_name"):
+            cats = await db_get_categories()
+            cat  = next((c for c in cats
+                         if c["name"].lower() == parsed["cat_name"].lower()), None)
+            if cat:
+                cat_id = cat["id"]
+            else:
+                await msg.answer(
+                    f"⚠️ '<b>{parsed['cat_name']}</b>' kategoriyasi topilmadi.\n"
+                    "Avval kategoriyani yarating yoki to'g'ri nom kiriting.",
+                    parse_mode="HTML"
+                )
+                return
+
+        # Mahsulotni saqlash
+        pid = await db_add_product(
+            name      = parsed["name"],
+            price     = parsed["price"],
+            cat_id    = cat_id,
+            sub_id    = None,
+            photo_id  = None,
+            has_variants = bool(parsed.get("variants")),
+            stock     = parsed.get("stock"),
+            old_price = parsed.get("old_price"),
+            desc      = parsed.get("desc", ""),
+        )
+        if not pid:
+            await msg.answer("❌ Saqlashda xatolik yuz berdi."); return
+
+        # Variantlarni saqlash
+        for v in parsed.get("variants", []):
+            await db_add_variant(pid, v["name"], extra_price=v["extra_price"])
+
+        # Tasdiq xabari
+        lines = [f"✅ <b>{parsed['name']}</b> qo'shildi! (#{pid})"]
+        lines.append(f"💰 {parsed['price']:,} so'm")
+        if parsed.get("old_price"):
+            lines.append(f"🔥 Eski narx: {parsed['old_price']:,} so'm")
+        if parsed.get("stock") is not None:
+            lines.append(f"📦 Stok: {parsed['stock']} ta")
+        if parsed.get("cat_name"):
+            lines.append(f"📂 {parsed['cat_name']}")
+        if parsed.get("variants"):
+            turlar = ", ".join(
+                f"{v['name']}" + (f" ({'+' if v['extra_price']>=0 else ''}{v['extra_price']:,})"
+                                  if v['extra_price'] != 0 else "")
+                for v in parsed["variants"]
+            )
+            lines.append(f"🎨 Turlar: {turlar}")
+        lines.append("\nYana mahsulot qo'shish uchun matn yuboring yoki 🔙 bosing.")
+        await msg.answer("\n".join(lines), parse_mode="HTML")
+
     @dp.message_handler(state=AddProduct.cat)
     async def addprod_cat(msg: types.Message, state: FSMContext):
         if msg.text == "➕ Yangi kategoriya":
@@ -1127,25 +1218,63 @@ def register_admin(dp):
     @dp.message_handler(commands=["help"])
     async def admin_help(msg: types.Message):
         if not is_admin(msg.from_user.id): return
+
+        # 1-qism: Asosiy panel va mahsulotlar
         await msg.answer(
-            "📋 <b>Admin buyruqlari:</b>\n\n"
-            "<b>📦 Mahsulot:</b>\n"
-            "/add — qo'shish\n"
-            "/edit — tahrirlash\n"
-            "/delete — o'chirish\n"
-            "/duplicate 5 — nusxalash\n"
-            "/move 5 — ko'chirish\n"
-            "/find atir — qidirish\n"
-            "/export — Excel ga chiqarish\n\n"
-            "<b>💰 Narx:</b>\n"
-            "/bulkprice — ommaviy o'zgartirish\n\n"
-            "<b>📂 Kategoriya:</b>\n"
-            "/addcat | /addsub | /delcat | /delsub\n\n"
-            "<b>🛍 Buyurtma:</b>\n"
-            "/order 5 — ko'rish\n"
-            "/msg 5 — mijozga xabar\n\n"
-            "<b>👥 Foydalanuvchi:</b>\n"
-            "/ban 123 | /unban 123",
+            "📖 <b>ADMIN YO'RIQNOMASI</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━━━\n\n"
+
+            "🖥 <b>ASOSIY PANEL TUGMALARI</b>\n"
+            "📋 <b>Buyurtmalar</b> — Yangi va joriy buyurtmalar ro'yxati. "
+            "Har bir buyurtmada: mijoz ma'lumoti, mahsulotlar, manzil. "
+            "«Qabul qildim» → «Yo'lda» → «Yetkazildi» tartibida holat o'zgartiring.\n\n"
+            "📊 <b>Statistika</b> — Jami mijozlar, mahsulotlar, buyurtmalar soni va daromad.\n\n"
+            "📦 <b>Mahsulotlar</b> — Barcha mahsulotlar ro'yxati. "
+            "Har birining ostida ✏️ Tahrirlash, 📑 Nusxalash, 🗑 O'chirish tugmalari bor.\n\n"
+            "📂 <b>Kategoriyalar</b> — Kategoriya va subkategoriyalarni boshqarish.\n\n"
+            "👥 <b>Mijozlar</b> — Ro'yxatdagi barcha xaridorlar, "
+            "nechta buyurtma qilganlari, qo'shilgan sana. Bloklash imkoniyati bor.\n\n"
+            "💾 <b>Bekap olish</b> — Butun baza (mahsulotlar, mijozlar, buyurtmalar) "
+            "Excel faylda saqlanadi va sizga yuboriladi.\n\n"
+            "📢 <b>Xabar yuborish</b> — Barcha foydalanuvchilarga bir vaqtda xabar.\n\n",
+            parse_mode="HTML"
+        )
+
+        # 2-qism: Buyruqlar
+        await msg.answer(
+            "⌨️ <b>BUYRUQLAR (qo'shimcha imkoniyatlar)</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━━━\n\n"
+
+            "📦 <b>Mahsulot boshqaruvi:</b>\n"
+            "/add — Bosqichma-bosqich yangi mahsulot qo'shish (yangi adminlar uchun)\n"
+            "/bulk — Bitta xabarda tez qo'shish (tajribali adminlar uchun)\n"
+            "  <i>Misol: Nom: Futbolka / Narx: 50000 / Kategoriya: Kiyim</i>\n"
+            "/edit — Mahsulot nomini yozib, kerakli maydonni o'zgartirish\n"
+            "/delete 5 — #5 mahsulotni o'chirish\n"
+            "/duplicate 5 — #5 mahsulotni nusxalash (tez qo'shish uchun)\n"
+            "/move 5 — #5 mahsulotni boshqa kategoriyaga ko'chirish\n"
+            "/find [nom] — Mahsulot qidirish\n\n"
+
+            "💰 <b>Narx:</b>\n"
+            "/bulkprice — Bir kategoriya/barcha mahsulot narxini foiz yoki miqdorga o'zgartirish\n\n"
+
+            "📂 <b>Kategoriya:</b>\n"
+            "/addcat — Yangi kategoriya\n"
+            "/addsub — Yangi subkategoriya\n"
+            "/delcat — Kategoriyani o'chirish (ichidagi mahsulotlar ham o'chadi!)\n"
+            "/delsub — Subkategoriyani o'chirish\n\n"
+
+            "🛍 <b>Buyurtma:</b>\n"
+            "/order 5 — #5 buyurtma tafsilotlarini ko'rish\n"
+            "/export — So'nggi 500 ta buyurtmani Excel faylda olish\n\n"
+
+            "👥 <b>Foydalanuvchi:</b>\n"
+            "/ban 123456 — #123456 ID li foydalanuvchini bloklash\n"
+            "/unban 123456 — Blokdan chiqarish\n\n"
+
+            "━━━━━━━━━━━━━━━━━━━━━━\n"
+            "💡 <b>Maslahat:</b> Mahsulot ID sini bilish uchun «📦 Mahsulotlar» "
+            "tugmasini bosing — ro'yxatda har birining #raqami ko'rinadi.",
             parse_mode="HTML"
         )
 
@@ -1166,6 +1295,65 @@ def _parse_variant(line: str):
         name  = line
         extra = 0
     return name, extra
+
+
+def _parse_bulk_product(text: str) -> dict | None:
+    """
+    Admin yuboran erkin matndan mahsulot ma'lumotlarini ajratib oladi.
+    Katta/kichik harf farqi yo'q, tartib muhim emas.
+
+    Misol:
+        Nom: Erkaklar futbolkasi
+        Narx: 120 000
+        Kategoriya: Kiyimlar
+        Stok: 50
+        Tavsif: Paxtali, qulay futbolka
+        Turlar: Qizil, Ko'k +5000, Yashil -3000
+        Eski narx: 150000
+    """
+    fields = {}
+    pattern = re.compile(
+        r'^(nom|narx|kategoriya|stok|tavsif|turlar|eski\s*narx)\s*:\s*(.+)$',
+        re.IGNORECASE | re.MULTILINE
+    )
+    for match in pattern.finditer(text):
+        key   = match.group(1).strip().lower().replace(" ", "_")
+        value = match.group(2).strip()
+        fields[key] = value
+
+    # Majburiy maydonlar
+    if "nom" not in fields or "narx" not in fields:
+        return None
+
+    # Narxni tozalash
+    narx_txt = fields["narx"].replace(" ", "").replace(",", "")
+    if not narx_txt.isdigit():
+        return None
+
+    # Turlarni ajratish (vergul yoki yangi qator)
+    turlar = []
+    if "turlar" in fields:
+        for tur in re.split(r'[,\n]', fields["turlar"]):
+            tur = tur.strip()
+            if tur:
+                name, extra = _parse_variant(tur)
+                if name:
+                    turlar.append({"name": name, "extra_price": extra})
+
+    # Eski narxni tozalash
+    old_price = None
+    if fields.get("eski_narx", "").replace(" ", "").replace(",", "").isdigit():
+        old_price = int(fields["eski_narx"].replace(" ", "").replace(",", ""))
+
+    return {
+        "name":      fields["nom"],
+        "price":     int(narx_txt),
+        "cat_name":  fields.get("kategoriya", ""),
+        "stock":     int(fields["stok"]) if fields.get("stok", "").isdigit() else None,
+        "desc":      fields.get("tavsif", ""),
+        "old_price": old_price,
+        "variants":  turlar,
+    }
 
 
 async def _save_new_product(msg, state):
