@@ -117,21 +117,23 @@ def register_admin(dp):
         if not prods:
             await msg.answer("Mahsulotlar yo'q.", reply_markup=staff_kb())
             return
-        await msg.answer(f"📦 <b>Jami: {len(prods)} ta</b>", parse_mode="HTML")
-        for p in prods:
+        for i, p in enumerate(prods):
             ic     = "🖼" if p.get("photo_id") else "📄"
             var    = "🎨" if p.get("has_variants") else ""
             sub    = f" › {p['sub_name']}" if p.get("sub_name") else ""
             active = "" if p.get("is_active", True) else " ⛔"
             disc   = " 🔥" if p.get("old_price") else ""
             stock  = f" [{p['stock']} ta]" if p.get("stock") is not None else ""
+            # Sarlavha faqat birinchi mahsulotda
+            prefix = f"📦 <b>Jami: {len(prods)} ta</b>\n\n" if i == 0 else ""
             text = (
-                f"{ic}{var} <b>#{p['id']} {p['name']}</b>{active}{disc}\n"
+                f"{prefix}{ic}{var} <b>#{p['id']} {p['name']}</b>{active}{disc}\n"
                 f"   📂 {p.get('cat_name','—')}{sub} | "
                 f"💰 {p['price']:,} so'm{stock}"
             )
-            await msg.answer(text, reply_markup=admin_product_row_kb(p['id']), parse_mode="HTML")
-        await msg.answer("👆 Har bir mahsulot ostida tugmalar orqali boshqaring.", reply_markup=staff_kb())
+            # Oxirgi mahsulotda panel klaviaturasini qaytaramiz
+            kb = staff_kb() if i == len(prods) - 1 else None
+            await msg.answer(text, reply_markup=admin_product_row_kb(p['id']) if not kb else admin_product_row_kb(p['id']), parse_mode="HTML")
 
     # ── Mahsulot tugmalari: Tahrirlash / Nusxalash / O'chirish ──
     @dp.callback_query_handler(lambda c: c.data.startswith("padm_dup_"))
@@ -190,24 +192,27 @@ def register_admin(dp):
         if not users:
             await msg.answer("Mijozlar yo'q.", reply_markup=staff_kb())
             return
-        await msg.answer(f"👥 <b>Jami: {len(users)} ta mijoz</b>", parse_mode="HTML")
-        for u in users[:50]:  # bir martada juda ko'p xabar yubormaslik uchun cheklov
-            name    = u.get("full_name") or "—"
-            uname   = f"@{u['username']}" if u.get("username") else "—"
-            phone   = u.get("phone") or "—"
-            status  = "🚫 Bloklangan" if u.get("is_banned") else "✅ Faol"
-            joined  = u["joined_at"].strftime("%d.%m.%Y") if u.get("joined_at") else "—"
-            last    = u["last_order_at"].strftime("%d.%m.%Y") if u.get("last_order_at") else "Hali yo'q"
+        visible = users[:50]
+        for i, u in enumerate(visible):
+            name   = u.get("full_name") or "—"
+            uname  = f"@{u['username']}" if u.get("username") else "—"
+            phone  = u.get("phone") or "—"
+            status = "🚫 Bloklangan" if u.get("is_banned") else "✅ Faol"
+            joined = u["joined_at"].strftime("%d.%m.%Y") if u.get("joined_at") else "—"
+            last   = u["last_order_at"].strftime("%d.%m.%Y") if u.get("last_order_at") else "Hali yo'q"
+            extra  = f" ({len(users) - 50} ta ko'rsatilmadi)" if len(users) > 50 else ""
+            prefix = f"👥 <b>Jami: {len(users)} ta</b>{extra}\n\n" if i == 0 else ""
             text = (
-                f"👤 <b>{name}</b> ({uname})\n"
+                f"{prefix}👤 <b>{name}</b> ({uname})\n"
                 f"   🆔 <code>{u['id']}</code> | 📱 {phone}\n"
                 f"   🛍 Buyurtmalar: <b>{u['order_count']}</b> | Oxirgisi: {last}\n"
                 f"   📅 Qo'shildi: {joined} | {status}"
             )
-            await msg.answer(text, reply_markup=admin_user_row_kb(u['id'], u.get('is_banned', False)), parse_mode="HTML")
-        if len(users) > 50:
-            await msg.answer(f"… va yana {len(users) - 50} ta mijoz (faqat eng faol 50 tasi ko'rsatildi).")
-        await msg.answer("👆 Har bir mijoz ostida bloklash tugmasi bor.", reply_markup=staff_kb())
+            await msg.answer(
+                text,
+                reply_markup=admin_user_row_kb(u['id'], u.get('is_banned', False)),
+                parse_mode="HTML"
+            )
 
     @dp.callback_query_handler(lambda c: c.data.startswith("uadm_ban_"))
     async def uadm_ban(call: types.CallbackQuery):
@@ -480,7 +485,6 @@ def register_admin(dp):
                 for v in parsed["variants"]
             )
             lines.append(f"🎨 Turlar: {turlar}")
-        lines.append("\nYana mahsulot qo'shish uchun matn yuboring yoki 🔙 bosing.")
         await msg.answer("\n".join(lines), parse_mode="HTML")
 
     @dp.message_handler(state=AddProduct.cat)
