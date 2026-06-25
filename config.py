@@ -11,6 +11,13 @@ BOT_TOKEN      = os.environ.get("BOT_TOKEN", "")
 ADMIN_ID       = int(os.environ.get("ADMIN_ID", "6170044774"))
 ADMIN_USERNAME = os.environ.get("ADMIN_USERNAME", "@Musokhan_0")
 
+# ── To'lov ───────────────────────────────────────
+# Admin panelidan /setpayment buyrug'i orqali o'zgartiriladi
+PAYMENT_INFO   = os.environ.get(
+    "PAYMENT_INFO",
+    "💳 To'lov: Mahsulot yetkazilgandan keyin naqd yoki karta orqali."
+)
+
 # ── Database ─────────────────────────────────────
 DATABASE_URL = os.environ.get("DATABASE_URL", "")
 

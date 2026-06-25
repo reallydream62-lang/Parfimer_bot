@@ -18,6 +18,7 @@ from db.connection import create_pool, close_pool
 from db.init_db import init_db
 from db.orders import db_get_inactive_cart_users
 from db.users import db_get_stats, db_get_daily_report, db_is_banned
+from db.products import db_get_low_stock, db_set_product_active
 from db.carts import cart_get, cart_total
 from utils.backup import export_full_backup
 
@@ -55,16 +56,38 @@ def _run_health_server():
     server.serve_forever()
 
 
-# ── Ban middleware ────────────────────────────────
+# ── Ban + Rate limit middleware ───────────────────
+# Rate limit: 10 soniyada 15 dan ortiq xabar → vaqtincha "jim"
+_RATE_LIMIT   = 15   # maksimal xabar soni
+_RATE_WINDOW  = 10   # soniya ichida
+_rate_counts: dict = {}  # uid → [timestamp, ...]
+
+def _is_rate_limited(uid: int) -> bool:
+    """Foydalanuvchi spam qilyaptimi — True qaytaradi."""
+    now    = asyncio.get_event_loop().time()
+    times  = _rate_counts.get(uid, [])
+    times  = [t for t in times if now - t < _RATE_WINDOW]
+    times.append(now)
+    _rate_counts[uid] = times
+    return len(times) > _RATE_LIMIT
+
 class BanMiddleware(BaseMiddleware):
     async def on_pre_process_message(self, msg: types.Message, data: dict):
-        if await db_is_banned(msg.from_user.id):
+        uid = msg.from_user.id
+        if await db_is_banned(uid):
             await msg.answer("⛔ Siz bloklangansiz.")
+            raise CancelledError()
+        if _is_rate_limited(uid):
+            await msg.answer("🐢 Iltimos, biroz sekinroq yozing.")
             raise CancelledError()
 
     async def on_pre_process_callback_query(self, cb: types.CallbackQuery, data: dict):
-        if await db_is_banned(cb.from_user.id):
+        uid = cb.from_user.id
+        if await db_is_banned(uid):
             await cb.answer("⛔ Siz bloklangansiz.", show_alert=True)
+            raise CancelledError()
+        if _is_rate_limited(uid):
+            await cb.answer("🐢 Sekinroq bosing.", show_alert=True)
             raise CancelledError()
 
 
@@ -144,6 +167,46 @@ async def cart_reminder():
             logger.error(f"cart_reminder: {e}")
 
 
+async def low_stock_alert():
+    """
+    Har kuni soat 09:00 da:
+    - Stok 0 bo'lgan mahsulotlarni avtomatik passiv qiladi (is_active=FALSE)
+    - Stok 5 tadan kam qolganlarni adminga ro'yxat qilib yuboradi
+    """
+    while True:
+        now      = datetime.now()
+        next_run = now.replace(hour=9, minute=0, second=0, microsecond=0)
+        if now >= next_run:
+            next_run += timedelta(days=1)
+        await asyncio.sleep((next_run - now).total_seconds())
+        try:
+            products = await db_get_low_stock(threshold=5)
+            if not products:
+                continue
+
+            lines       = ["⚠️ <b>Past stok ogohlantirishi</b>\n"]
+            auto_hidden = []
+
+            for p in products:
+                if p["stock"] == 0:
+                    # Avtomatik passiv qilish
+                    await db_set_product_active(p["id"], False)
+                    auto_hidden.append(p["name"])
+                    lines.append(f"🔴 <b>#{p['id']} {p['name']}</b> — TUGADI, avtomatik yashirildi")
+                else:
+                    lines.append(f"🟡 #{p['id']} {p['name']} — {p['stock']} ta qoldi")
+
+            if auto_hidden:
+                lines.append(
+                    f"\n🙈 <b>{len(auto_hidden)} ta mahsulot yashirildi.</b>\n"
+                    "Stok to'ldirilgach, Mahsulotlar bo'limidan qayta faollashtiring."
+                )
+            lines.append("\n📦 Mahsulotlar bo'limidan stokni yangilang.")
+            await bot.send_message(ADMIN_ID, "\n".join(lines), parse_mode="HTML")
+        except Exception as e:
+            logger.error(f"low_stock_alert: {e}")
+
+
 async def daily_backup():
     """
     Har kuni soat 03:00 da (tunda, kam yuklama paytida) butun bazaning
@@ -212,7 +275,8 @@ async def on_startup(dp):
     asyncio.create_task(cart_reminder())
     asyncio.create_task(daily_report())
     asyncio.create_task(daily_backup())
-    logger.info("🌸 Sifat Parfimer Shop ishga tushdi!")
+    asyncio.create_task(low_stock_alert())
+    logger.info("🛍 BotForge Demo ishga tushdi!")
 
 
 async def on_shutdown(dp):
