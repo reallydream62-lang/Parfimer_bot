@@ -7,7 +7,7 @@ from aiogram import types
 from aiogram.dispatcher import FSMContext
 from aiogram.dispatcher.filters.state import State, StatesGroup
 
-from config import MIN_ORDER_SUM
+from config import MIN_ORDER_SUM, ADMIN_ID, PAYMENT_INFO
 from utils.helpers import notify, validate_phone, send_order_info, is_staff
 from keyboards.reply import (
     main_kb, back_kb, cart_main_kb, confirm_kb,
@@ -20,7 +20,6 @@ from db.carts import (
 )
 from db.orders import db_create_order, db_get_order
 from db.users import db_save_user
-from config import ADMIN_ID
 
 logger = logging.getLogger(__name__)
 
@@ -266,7 +265,8 @@ async def _finish_order(msg, state, data):
 
     await msg.answer(
         f"✅ Buyurtma <b>#{oid}</b> qabul qilindi!\n"
-        f"Tez orada ko'rib chiqamiz va yetkazib berish narxini bildiramiz. ✨",
+        f"Tez orada ko'rib chiqamiz va yetkazib berish narxini bildiramiz.\n\n"
+        f"{PAYMENT_INFO}",
         reply_markup=main_kb(), parse_mode="HTML"
     )
 

@@ -298,6 +298,43 @@ def register_admin(dp):
             markup = order_inline_kb(order["id"], order["status"])
         await send_order_info(msg.bot, msg.chat.id, order, markup=markup)
 
+    # ── /setpayment — to'lov ma'lumotini o'zgartirish ──
+    @dp.message_handler(commands=["setpayment"])
+    async def admin_set_payment(msg: types.Message, state: FSMContext):
+        if not is_admin(msg.from_user.id): return
+        await state.finish()
+        from config import PAYMENT_INFO
+        await msg.answer(
+            "💳 <b>To'lov ma'lumotini o'zgartirish</b>\n\n"
+            f"Hozirgi:\n<i>{PAYMENT_INFO}</i>\n\n"
+            "Yangi matnni yozing (karta raqami, bank, istalgan format):\n\n"
+            "<i>Misol:\n"
+            "💳 Uzcard: 8600 1234 5678 9012 (Alisher N.)\n"
+            "yoki: Naqd to'lov yetkazib berishda.</i>",
+            parse_mode="HTML", reply_markup=back_kb()
+        )
+        await state.set_state("set_payment_input")
+
+    @dp.message_handler(state="set_payment_input")
+    async def admin_set_payment_input(msg: types.Message, state: FSMContext):
+        if msg.text == "🔙 Orqaga":
+            await state.finish()
+            await msg.answer("Bekor qilindi.", reply_markup=staff_kb())
+            return
+        import os, config as cfg
+        new_info = msg.text.strip()
+        # Runtime da o'zgartiramiz (restart bo'lguncha ishlaydi)
+        # Doimiy saqlash uchun Render'da PAYMENT_INFO env var ni o'zgartiring
+        cfg.PAYMENT_INFO = new_info
+        await state.finish()
+        await msg.answer(
+            f"✅ To'lov ma'lumoti yangilandi:\n\n<i>{new_info}</i>\n\n"
+            "⚠️ Bu o'zgarish bot qayta ishga tushgunga qadar saqlangan bo'ladi.\n"
+            "Doimiy saqlash uchun Render → Environment → "
+            "<b>PAYMENT_INFO</b> ni yangilang.",
+            parse_mode="HTML", reply_markup=staff_kb()
+        )
+
     # ── 📋 Buyurtmalar ────────────────────────────
     @dp.message_handler(lambda m: m.text == "📋 Buyurtmalar" and is_admin(m.from_user.id), state="*")
     async def admin_orders(msg: types.Message, state: FSMContext):
@@ -1267,6 +1304,8 @@ def register_admin(dp):
             "🛍 <b>Buyurtma:</b>\n"
             "/order 5 — #5 buyurtma tafsilotlarini ko'rish\n"
             "/export — So'nggi 500 ta buyurtmani Excel faylda olish\n\n"
+            "💳 <b>To'lov:</b>\n"
+            "/setpayment — Karta raqami yoki to'lov usulini o'zgartirish\n\n"
 
             "👥 <b>Foydalanuvchi:</b>\n"
             "/ban 123456 — #123456 ID li foydalanuvchini bloklash\n"
