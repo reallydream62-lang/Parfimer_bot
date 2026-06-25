@@ -48,20 +48,37 @@ async def db_create_order(user_id: int, phone: str, cart: list,
                     qty     = item.get("qty", 1)
                     if prod_id:
                         if item.get("variant_id"):
-                            # Variant stoki
                             await conn.execute(
                                 "UPDATE product_variants"
                                 " SET stock = GREATEST(COALESCE(stock,0) - $1, 0)"
                                 " WHERE id = $2 AND stock IS NOT NULL",
                                 qty, item["variant_id"]
                             )
+                            # Barcha variantlar 0 ga tushgan bo'lsa — mahsulotni passiv qil
+                            remaining = await conn.fetchval(
+                                "SELECT COALESCE(SUM(stock), 0)"
+                                " FROM product_variants"
+                                " WHERE product_id = $1 AND stock IS NOT NULL",
+                                prod_id
+                            )
+                            if remaining == 0:
+                                await conn.execute(
+                                    "UPDATE products SET is_active = FALSE WHERE id = $1",
+                                    prod_id
+                                )
                         else:
-                            # Asosiy mahsulot stoki
                             await conn.execute(
                                 "UPDATE products"
                                 " SET stock = GREATEST(COALESCE(stock,0) - $1, 0)"
                                 " WHERE id = $2 AND stock IS NOT NULL",
                                 qty, prod_id
+                            )
+                            # Stok 0 ga tushdi — darhol passiv qil
+                            await conn.execute(
+                                "UPDATE products SET is_active = FALSE"
+                                " WHERE id = $1"
+                                "   AND stock IS NOT NULL AND stock = 0",
+                                prod_id
                             )
                 return oid
     except Exception as e:

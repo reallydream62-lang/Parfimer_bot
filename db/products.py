@@ -443,3 +443,36 @@ async def db_get_last_seen(uid: int, limit: int = 5):
             return [dict(r) for r in rows]
     except Exception as e:
         logger.error(f"db_get_last_seen: {e}"); return []
+
+
+async def db_get_low_stock(threshold: int = 5) -> list:
+    """
+    Stok belgilangan va threshold dan kam yoki teng mahsulotlarni qaytaradi.
+    Har kuni ertalab adminga ogohlantirish yuborish uchun ishlatiladi.
+    """
+    try:
+        pool = get_pool()
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(
+                "SELECT id, name, stock FROM products"
+                " WHERE stock IS NOT NULL AND stock <= $1 AND is_active = TRUE"
+                " ORDER BY stock ASC",
+                threshold
+            )
+            return [dict(r) for r in rows]
+    except Exception as e:
+        logger.error(f"db_get_low_stock: {e}"); return []
+
+
+async def db_set_product_active(pid: int, active: bool) -> bool:
+    """Mahsulotni faol yoki passiv qilish (is_active = TRUE/FALSE)."""
+    try:
+        pool = get_pool()
+        async with pool.acquire() as conn:
+            await conn.execute(
+                "UPDATE products SET is_active=$1 WHERE id=$2",
+                active, pid
+            )
+            return True
+    except Exception as e:
+        logger.error(f"db_set_product_active: {e}"); return False
